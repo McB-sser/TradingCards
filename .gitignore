@@ -1,16 +1,21 @@
-# Compiled class file
+# Java / JVM
 *.class
-
-# Log file
 *.log
+hs_err_pid*
+replay_pid*
 
-# BlueJ files
-*.ctxt
+# Build outputs
+target/
+build/
+out/
+bin/
+dist/
 
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
+# Dependency caches
+.gradle/
+.mvn/
 
-# Package Files #
+# Packaged artifacts
 *.jar
 *.war
 *.nar
@@ -19,6 +24,41 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+# IDE / Editor
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local test server files
+plugins/
+world/
+world_nether/
+world_the_end/
+logs/
+crash-reports/
+banned-ips.json
+banned-players.json
+ops.json
+usercache.json
+whitelist.json
+eula.txt
+server.properties
+paper.yml
+bukkit.yml
+spigot.yml
+commands.yml
+help.yml
+permissions.yml
+version_history.json
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
