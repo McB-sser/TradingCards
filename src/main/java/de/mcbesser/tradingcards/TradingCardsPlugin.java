@@ -1,0 +1,58 @@
+package de.mcbesser.tradingcards;
+
+import de.mcbesser.tradingcards.command.TradingCardsCommand;
+import de.mcbesser.tradingcards.image.MotifRegistry;
+import java.io.File;
+import java.io.IOException;
+import java.util.Objects;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.java.JavaPlugin;
+
+public final class TradingCardsPlugin extends JavaPlugin {
+
+    private MotifRegistry motifRegistry;
+    private CardService cardService;
+
+    @Override
+    public void onEnable() {
+        saveDefaultConfig();
+        createDataFolders();
+
+        this.motifRegistry = new MotifRegistry(this, new File(getDataFolder(), getConfig().getString("motif-folder", "motifs")));
+        this.cardService = new CardService(this);
+
+        reloadMotifs();
+        registerCommands();
+        getServer().getPluginManager().registerEvents(new TradingCardListener(this), this);
+    }
+
+    public void reloadMotifs() {
+        try {
+            motifRegistry.reload();
+            getLogger().info("Loaded " + motifRegistry.getMotifCount() + " motif(s).");
+        } catch (IOException exception) {
+            getLogger().severe("Failed to load motifs: " + exception.getMessage());
+        }
+    }
+
+    public MotifRegistry getMotifRegistry() {
+        return motifRegistry;
+    }
+
+    public CardService getCardService() {
+        return cardService;
+    }
+
+    private void createDataFolders() {
+        if (!getDataFolder().exists() && !getDataFolder().mkdirs()) {
+            getLogger().warning("Could not create plugin data folder.");
+        }
+    }
+
+    private void registerCommands() {
+        PluginCommand command = Objects.requireNonNull(getCommand("tradingcards"), "tradingcards command missing");
+        TradingCardsCommand executor = new TradingCardsCommand(this);
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
+    }
+}

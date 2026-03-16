@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingCards Map Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="layout">
+        <section class="panel hero">
+            <div>
+                <p class="eyebrow">TradingCards Tool</p>
+                <h1>1x2 Karten-Editor fuer Motiv-Poster</h1>
+                <p class="lead">
+                    Der Editor erzeugt ein hohes 1x2-Motiv fuer die Wandanzeige. Ingame haelt der Spieler eine
+                    Metadaten-Map in der Hand, an der Wand erscheint aber das eigentliche Bildmotiv.
+                </p>
+            </div>
+            <div class="hero-actions">
+                <button id="pick-output" type="button">Ausgabeordner waehlen</button>
+                <button id="save-all" type="button" class="primary">Alle speichern</button>
+            </div>
+            <p id="output-status" class="status">Kein Ausgabeordner ausgewaehlt.</p>
+        </section>
+
+        <section class="panel controls">
+            <div class="controls-header">
+                <div>
+                    <p class="eyebrow">Import</p>
+                    <h2>Motive anlegen</h2>
+                </div>
+                <label class="file-input">
+                    <input id="image-input" type="file" accept="image/png,image/jpeg" multiple>
+                    <span>Dateien waehlen</span>
+                </label>
+            </div>
+            <p class="hint">
+                Das Bild wird als 1x2-Poster vorbereitet. Die JSON speichert die TradingCard-Metadaten fuer Name,
+                Lore und interne Zuordnung.
+            </p>
+            <div id="empty-state" class="empty-state">Noch keine Karten geladen.</div>
+            <div id="card-list" class="card-list"></div>
+        </section>
+    </main>
+
+    <template id="card-template">
+        <article class="card-item">
+            <div class="preview-wrap">
+                <canvas class="map-preview" width="128" height="256"></canvas>
+                <div class="preview-meta">
+                    <strong class="card-title-preview"></strong>
+                    <span class="card-id-preview"></span>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <label><span>Karten-ID</span><input data-field="id" type="text" placeholder="z. B. dragon_01"></label>
+                <label><span>Titel</span><input data-field="title" type="text" placeholder="z. B. Nether Dragon"></label>
+                <label><span>Serie</span><input data-field="series" type="text" placeholder="Basis Set"></label>
+                <label><span>Nummer</span><input data-field="number" type="text" placeholder="001"></label>
+                <label>
+                    <span>Seltenheit</span>
+                    <select data-field="rarity">
+                        <option>Common</option>
+                        <option>Uncommon</option>
+                        <option>Rare</option>
+                        <option>Epic</option>
+                        <option>Legendary</option>
+                    </select>
+                </label>
+                <label><span>Artist</span><input data-field="artist" type="text" placeholder="Name"></label>
+                <label><span>Tags</span><input data-field="tags" type="text" placeholder="mob, dragon, nether"></label>
+                <label>
+                    <span>Layout</span>
+                    <select data-field="fitMode">
+                        <option value="cover">Cover</option>
+                        <option value="contain">Contain</option>
+                        <option value="stretch">Stretch</option>
+                    </select>
+                </label>
+                <label><span>Zoom</span><input data-field="zoom" type="range" min="0.5" max="4" step="0.05" value="1"></label>
+                <label><span>X-Verschiebung</span><input data-field="offsetX" type="range" min="-256" max="256" step="1" value="0"></label>
+                <label><span>Y-Verschiebung</span><input data-field="offsetY" type="range" min="-256" max="256" step="1" value="0"></label>
+                <label><span>Hintergrund</span><input data-field="background" type="color" value="#111111"></label>
+                <label>
+                    <span>Transparenter Hintergrund</span>
+                    <select data-field="transparentBackground">
+                        <option value="off">Nein</option>
+                        <option value="on">Ja</option>
+                    </select>
+                </label>
+                <label><span>Rahmenfarbe</span><input data-field="accent" type="color" value="#d7bc6f"></label>
+                <label class="wide"><span>Beschreibung</span><textarea data-field="description" rows="4" placeholder="Kurzer Karten-Text"></textarea></label>
+                <label class="wide"><span>Flavor Text</span><textarea data-field="flavorText" rows="3" placeholder="Optionaler Flavor Text"></textarea></label>
+            </div>
+
+            <div class="row-actions">
+                <button type="button" data-action="download-png">PNG laden</button>
+                <button type="button" data-action="download-json">JSON laden</button>
+                <button type="button" data-action="save-entry" class="primary">In Ausgabeordner speichern</button>
+                <button type="button" data-action="remove" class="danger">Entfernen</button>
+            </div>
+        </article>
+    </template>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+name: TradingCards
+version: ${project.version}
+main: de.mcbesser.tradingcards.TradingCardsPlugin
+api-version: "1.20"
+author: McB_sser
+description: Trading card plugin that turns motif images into Minecraft maps.
+commands:
+  tradingcards:
+    description: Main command for the TradingCards plugin
+    usage: /tradingcards <list|reload|give>
+    permission: tradingcards.admin
+    aliases: [tcards]
+permissions:
+  tradingcards.admin:
+    description: Allows managing trading card motifs and giving cards
+    default: op
+  tradingcards.place:
+    description: Allows placing trading card displays
+    default: true
+  tradingcards.break:
+    description: Allows breaking trading card displays
+    default: true
