@@ -22,7 +22,7 @@ public final class MetadataMapRenderer extends MapRenderer {
 
     public MetadataMapRenderer(LoadedMotif motif) {
         super(true);
-        this.image = buildCardImage(motif);
+        this.image = createCardImage(motif);
     }
 
     @Override
@@ -34,7 +34,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         rendered = true;
     }
 
-    private BufferedImage buildCardImage(LoadedMotif motif) {
+    public static BufferedImage createCardImage(LoadedMotif motif) {
         BufferedImage card = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = card.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
@@ -87,17 +87,16 @@ public final class MetadataMapRenderer extends MapRenderer {
         if (metadata.artist() != null) {
             y = drawLeftLines(graphics, limitLines(wrapText("Artist: " + metadata.artist(), 16), 1), y + 2, 8, new Color(194, 194, 194));
         }
-        drawLeftLines(graphics, limitLines(wrapText("Motif: " + motif.id(), 16), 1), 120, 8, new Color(194, 194, 194));
 
         graphics.dispose();
         return MapPalette.resizeImage(card);
     }
 
-    private String displayTitle(LoadedMotif motif, TradingCardMetadata metadata) {
+    private static String displayTitle(LoadedMotif motif, TradingCardMetadata metadata) {
         return metadata.title() != null ? metadata.title() : motif.displayName();
     }
 
-    private void drawCenteredLines(Graphics2D graphics, List<String> lines, int startY, int lineHeight) {
+    private static void drawCenteredLines(Graphics2D graphics, List<String> lines, int startY, int lineHeight) {
         int y = startY;
         for (String line : lines) {
             int width = graphics.getFontMetrics().stringWidth(line);
@@ -106,7 +105,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         }
     }
 
-    private int drawLeftLines(Graphics2D graphics, List<String> lines, int startY, int lineHeight, Color color) {
+    private static int drawLeftLines(Graphics2D graphics, List<String> lines, int startY, int lineHeight, Color color) {
         graphics.setColor(color);
         for (String line : lines) {
             graphics.drawString(line, 16, startY);
@@ -115,7 +114,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         return startY;
     }
 
-    private List<String> wrapText(String text, int maxChars) {
+    private static List<String> wrapText(String text, int maxChars) {
         List<String> lines = new ArrayList<>();
         if (text == null || text.isBlank()) {
             return lines;
@@ -140,7 +139,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         return lines;
     }
 
-    private List<String> limitLines(List<String> lines, int maxLines) {
+    private static List<String> limitLines(List<String> lines, int maxLines) {
         if (lines.size() <= maxLines) {
             return lines;
         }

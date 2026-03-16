@@ -44,7 +44,7 @@ public final class CardService {
         meta.setDisplayName(motif.displayName());
         List<String> lore = new ArrayList<>(buildLore(motif));
         lore.add(ChatColor.YELLOW + "Place on a wall to create");
-        lore.add(ChatColor.YELLOW + "a 1x2 painting display.");
+        lore.add(ChatColor.YELLOW + "a 1x3 painting display.");
         meta.setLore(lore);
 
         PersistentDataContainer data = meta.getPersistentDataContainer();
@@ -56,7 +56,7 @@ public final class CardService {
 
     public List<ItemStack> createPlacedDisplayItems(LoadedMotif motif, String displayId) {
         List<ItemStack> items = new ArrayList<>();
-        for (int panelIndex = 0; panelIndex < 2; panelIndex++) {
+        for (int panelIndex = 0; panelIndex < 3; panelIndex++) {
             ItemStack item = createMapItem(motif, panelIndex, false);
             MapMeta meta = (MapMeta) item.getItemMeta();
             if (meta == null) {
@@ -193,7 +193,6 @@ public final class CardService {
         if (!metadata.tags().isEmpty()) {
             lore.add(ChatColor.DARK_GREEN + "Tags: " + ChatColor.GREEN + String.join(", ", metadata.tags()));
         }
-        lore.add(ChatColor.DARK_GRAY + "Motif: " + motif.id());
         return lore;
     }
 

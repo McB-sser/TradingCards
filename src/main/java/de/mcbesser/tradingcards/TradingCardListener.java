@@ -66,18 +66,21 @@ public final class TradingCardListener implements Listener {
         }
 
         Block supportBottom = event.getClickedBlock();
-        Block supportTop = supportBottom.getRelative(BlockFace.UP);
+        Block supportMiddle = supportBottom.getRelative(BlockFace.UP);
+        Block supportTop = supportMiddle.getRelative(BlockFace.UP);
         Block displayBottom = supportBottom.getRelative(face);
+        Block displayMiddle = supportMiddle.getRelative(face);
         Block displayTop = supportTop.getRelative(face);
-        if (!canPlaceDisplay(supportBottom, supportTop, displayBottom, displayTop)) {
-            event.getPlayer().sendMessage("Not enough space for a 1x2 card display.");
+        if (!canPlaceDisplay(supportBottom, supportMiddle, supportTop, displayBottom, displayMiddle, displayTop)) {
+            event.getPlayer().sendMessage("Not enough space for a 1x3 card display.");
             event.setCancelled(true);
             return;
         }
 
         String displayId = UUID.randomUUID().toString();
         List<ItemStack> panelItems = plugin.getCardService().createPlacedDisplayItems(motif, displayId);
-        spawnFrame(displayBottom.getLocation(), face, panelItems.get(1), displayId, 1);
+        spawnFrame(displayBottom.getLocation(), face, panelItems.get(2), displayId, 2);
+        spawnFrame(displayMiddle.getLocation(), face, panelItems.get(1), displayId, 1);
         spawnFrame(displayTop.getLocation(), face, panelItems.get(0), displayId, 0);
 
         consumeOne(event.getPlayer(), item);
@@ -114,10 +117,12 @@ public final class TradingCardListener implements Listener {
         breakDisplay((ItemFrame) event.getEntity(), null);
     }
 
-    private boolean canPlaceDisplay(Block supportBottom, Block supportTop, Block displayBottom, Block displayTop) {
+    private boolean canPlaceDisplay(Block supportBottom, Block supportMiddle, Block supportTop, Block displayBottom, Block displayMiddle, Block displayTop) {
         return supportBottom.getType().isSolid()
+            && supportMiddle.getType().isSolid()
             && supportTop.getType().isSolid()
             && displayBottom.getType().isAir()
+            && displayMiddle.getType().isAir()
             && displayTop.getType().isAir();
     }
 
@@ -153,7 +158,7 @@ public final class TradingCardListener implements Listener {
             return;
         }
 
-        for (Entity entity : sourceFrame.getWorld().getNearbyEntities(sourceFrame.getLocation(), 2.0, 2.5, 2.0)) {
+        for (Entity entity : sourceFrame.getWorld().getNearbyEntities(sourceFrame.getLocation(), 2.0, 3.5, 2.0)) {
             if (entity instanceof ItemFrame frame) {
                 String otherDisplayId = frame.getPersistentDataContainer().get(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING);
                 if (displayId.equals(otherDisplayId)) {
