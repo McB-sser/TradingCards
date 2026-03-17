@@ -51,12 +51,12 @@ public final class MetadataMapRenderer extends MapRenderer {
             graphics.dispose();
             return MapPalette.resizeImage(card);
         }
-        graphics.setColor(new Color(36, 36, 40));
+        graphics.setColor(new Color(185, 185, 190));
         graphics.fillRect(0, 0, 14, MAP_SIZE);
         graphics.setColor(new Color(80, 80, 88));
-        graphics.fillRect(15, 12, MAP_SIZE - 23, 1);
-        graphics.fillRect(15, 31, MAP_SIZE - 23, 1);
-        graphics.fillRect(15, 104, MAP_SIZE - 23, 1);
+        graphics.fillRect(15, 11, MAP_SIZE - 16, 1);
+        graphics.fillRect(15, 31, MAP_SIZE - 16, 1);
+        graphics.fillRect(15, 104, MAP_SIZE - 16, 1);
 
         drawVerticalMeta(graphics, metadata);
 
@@ -136,9 +136,9 @@ public final class MetadataMapRenderer extends MapRenderer {
 
     private static void drawStatGrid(Graphics2D graphics, de.mcbesser.tradingcards.CardStats stats, TradingCardMetadata metadata) {
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 10));
-        drawStatCell(graphics, 14, 72, new Color(220, 70, 70), "Leben", "\u2665", stats.health(), 5, 8);
+        drawStatCell(graphics, 18, 72, new Color(220, 70, 70), "Leben", "\u2665", stats.health(), 5, 8);
         drawStatCell(graphics, 74, 72, new Color(214, 153, 64), "Hunger", "\u25C6", stats.hunger(), 5, 7);
-        drawStatCell(graphics, 14, 91, new Color(120, 170, 220), "R\u00FCstung", "\u25A0", stats.armor(), 5, 8);
+        drawStatCell(graphics, 18, 91, new Color(120, 170, 220), "R\u00FCstung", "\u25A0", stats.armor(), 5, 8);
         drawStatCell(graphics, 74, 91, new Color(186, 120, 220), "Kraft", "\u2736", stats.strength(), 5, 7);
 
         double multiplier = rarityMultiplier(metadata.rarity());
@@ -213,7 +213,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         String series = metadata.series() != null ? metadata.series() : "";
         String vertical = series.isBlank() ? number : number + "  " + series;
         AffineTransform oldTransform = graphics.getTransform();
-        graphics.setColor(new Color(185, 185, 190));
+        graphics.setColor(new Color(42, 42, 46));
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 9));
         graphics.rotate(-Math.PI / 2);
         graphics.drawString(vertical, -119, 10);
