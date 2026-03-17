@@ -124,7 +124,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         graphics.drawString(rarityText + " x " + formatMultiplier(multiplier), 18, 115);
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
         graphics.setColor(new Color(235, 210, 120));
-        String valueText = "= " + cardValue;
+        String valueText = String.valueOf(cardValue);
         graphics.drawString(valueText, 123 - graphics.getFontMetrics().stringWidth(valueText), 126);
     }
 
