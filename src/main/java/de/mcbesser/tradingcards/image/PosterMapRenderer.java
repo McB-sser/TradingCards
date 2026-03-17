@@ -16,12 +16,15 @@ public final class PosterMapRenderer extends MapRenderer {
     private final BufferedImage segment;
     private boolean rendered;
 
-    public PosterMapRenderer(LoadedMotif motif, int segmentIndex) {
+    public PosterMapRenderer(LoadedMotif motif, int segmentIndex, de.mcbesser.tradingcards.CardStats stats, int panelCount) {
         super(true);
-        BufferedImage display = new BufferedImage(MAP_SIZE, DISPLAY_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+        int displayHeight = panelCount * MAP_SIZE;
+        BufferedImage display = new BufferedImage(MAP_SIZE, displayHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = display.createGraphics();
         graphics.drawImage(motif.image(), 0, 0, null);
-        graphics.drawImage(MetadataMapRenderer.createCardImage(motif), 0, MAP_SIZE * 2, null);
+        if (panelCount == 3) {
+            graphics.drawImage(MetadataMapRenderer.createCardImage(motif, stats), 0, MAP_SIZE * 2, null);
+        }
         graphics.dispose();
         BufferedImage slice = display.getSubimage(0, segmentIndex * MAP_SIZE, MAP_SIZE, MAP_SIZE);
         this.segment = MapPalette.resizeImage(slice);

@@ -41,7 +41,7 @@ public final class TradingCardListener implements Listener {
         if (event.getHand() != EquipmentSlot.HAND || event.getClickedBlock() == null || event.getBlockFace() == null) {
             return;
         }
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK && event.getAction() != Action.LEFT_CLICK_BLOCK) {
             return;
         }
 
@@ -70,29 +70,39 @@ public final class TradingCardListener implements Listener {
             return;
         }
 
-        boolean includeCardPanel = !event.getPlayer().isSneaking();
+        DisplayMode mode = resolveDisplayMode(event);
+        if (mode == null) {
+            return;
+        }
+        CardStats stats = plugin.getCardService().getStats(item);
 
         Block supportBottom = event.getClickedBlock();
         Block supportMiddle = supportBottom.getRelative(BlockFace.UP);
-        Block supportTop = includeCardPanel ? supportMiddle.getRelative(BlockFace.UP) : null;
+        Block supportTop = mode == DisplayMode.FULL ? supportMiddle.getRelative(BlockFace.UP) : null;
         Block displayBottom = supportBottom.getRelative(face);
         Block displayMiddle = supportMiddle.getRelative(face);
-        Block displayTop = includeCardPanel ? supportTop.getRelative(face) : null;
-        if (!canPlaceDisplay(includeCardPanel, supportBottom, supportMiddle, supportTop, displayBottom, displayMiddle, displayTop)) {
-            event.getPlayer().sendMessage(includeCardPanel ? "Nicht genug Platz fuer eine 1x3 Kartenanzeige." : "Nicht genug Platz fuer eine 1x2 Bildanzeige.");
+        Block displayTop = mode == DisplayMode.FULL ? supportTop.getRelative(face) : null;
+        if (!canPlaceDisplay(mode, supportBottom, supportMiddle, supportTop, displayBottom, displayMiddle, displayTop)) {
+            event.getPlayer().sendMessage(switch (mode) {
+                case FULL -> "Nicht genug Platz fuer eine 1x3 Kartenanzeige.";
+                case IMAGE_ONLY -> "Nicht genug Platz fuer eine 1x2 Bildanzeige.";
+                case CARD_ONLY -> "Nicht genug Platz fuer eine Wertekarte.";
+            });
             event.setCancelled(true);
             return;
         }
 
         String displayId = UUID.randomUUID().toString();
-        List<ItemStack> panelItems = plugin.getCardService().createPlacedDisplayItems(motif, displayId, includeCardPanel);
-        if (includeCardPanel) {
+        List<ItemStack> panelItems = plugin.getCardService().createPlacedDisplayItems(motif, displayId, mode.panelCount(), mode == DisplayMode.CARD_ONLY, stats);
+        if (mode == DisplayMode.FULL) {
             spawnFrame(displayBottom.getLocation(), face, panelItems.get(2), displayId, 2);
             spawnFrame(displayMiddle.getLocation(), face, panelItems.get(1), displayId, 1);
             spawnFrame(displayTop.getLocation(), face, panelItems.get(0), displayId, 0);
-        } else {
+        } else if (mode == DisplayMode.IMAGE_ONLY) {
             spawnFrame(displayBottom.getLocation(), face, panelItems.get(1), displayId, 1);
             spawnFrame(displayMiddle.getLocation(), face, panelItems.get(0), displayId, 0);
+        } else {
+            spawnFrame(displayBottom.getLocation(), face, panelItems.get(0), displayId, 0);
         }
 
         consumeOne(event.getPlayer(), item);
@@ -177,12 +187,30 @@ public final class TradingCardListener implements Listener {
         breakDisplay((ItemFrame) event.getEntity(), null);
     }
 
-    private boolean canPlaceDisplay(boolean includeCardPanel, Block supportBottom, Block supportMiddle, Block supportTop, Block displayBottom, Block displayMiddle, Block displayTop) {
-        return supportBottom.getType().isSolid()
-            && supportMiddle.getType().isSolid()
-            && displayBottom.getType().isAir()
-            && displayMiddle.getType().isAir()
-            && (!includeCardPanel || (supportTop != null && supportTop.getType().isSolid() && displayTop != null && displayTop.getType().isAir()));
+    private boolean canPlaceDisplay(DisplayMode mode, Block supportBottom, Block supportMiddle, Block supportTop, Block displayBottom, Block displayMiddle, Block displayTop) {
+        if (!supportBottom.getType().isSolid() || !displayBottom.getType().isAir()) {
+            return false;
+        }
+        if (mode == DisplayMode.CARD_ONLY) {
+            return true;
+        }
+        if (!supportMiddle.getType().isSolid() || !displayMiddle.getType().isAir()) {
+            return false;
+        }
+        if (mode == DisplayMode.IMAGE_ONLY) {
+            return true;
+        }
+        return supportTop != null && supportTop.getType().isSolid() && displayTop != null && displayTop.getType().isAir();
+    }
+
+    private DisplayMode resolveDisplayMode(PlayerInteractEvent event) {
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            return event.getPlayer().isSneaking() ? DisplayMode.IMAGE_ONLY : DisplayMode.FULL;
+        }
+        if (event.getAction() == Action.LEFT_CLICK_BLOCK && event.getPlayer().isSneaking()) {
+            return DisplayMode.CARD_ONLY;
+        }
+        return null;
     }
 
     private void spawnFrame(Location location, BlockFace face, ItemStack item, String displayId, int panelIndex) {
@@ -217,6 +245,9 @@ public final class TradingCardListener implements Listener {
             return;
         }
 
+        ItemStack sourceItem = sourceFrame.getItem();
+        CardStats stats = plugin.getCardService().getStats(sourceItem);
+
         for (Entity entity : sourceFrame.getWorld().getNearbyEntities(sourceFrame.getLocation(), 2.0, 3.5, 2.0)) {
             if (entity instanceof ItemFrame frame) {
                 String otherDisplayId = frame.getPersistentDataContainer().get(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING);
@@ -227,7 +258,7 @@ public final class TradingCardListener implements Listener {
             }
         }
 
-        ItemStack drop = plugin.getCardService().createCardItem(motif);
+        ItemStack drop = plugin.getCardService().createCardItem(motif, stats);
         if (breaker != null) {
             java.util.HashMap<Integer, ItemStack> leftovers = breaker.getInventory().addItem(drop);
             leftovers.values().forEach(item -> breaker.getWorld().dropItemNaturally(sourceFrame.getLocation(), item));
@@ -241,5 +272,21 @@ public final class TradingCardListener implements Listener {
             return;
         }
         item.setAmount(item.getAmount() - 1);
+    }
+
+    private enum DisplayMode {
+        FULL(3),
+        IMAGE_ONLY(2),
+        CARD_ONLY(1);
+
+        private final int panelCount;
+
+        DisplayMode(int panelCount) {
+            this.panelCount = panelCount;
+        }
+
+        public int panelCount() {
+            return panelCount;
+        }
     }
 }
