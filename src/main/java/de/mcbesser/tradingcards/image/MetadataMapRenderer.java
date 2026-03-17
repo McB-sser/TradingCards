@@ -97,9 +97,9 @@ public final class MetadataMapRenderer extends MapRenderer {
         graphics.setColor(new Color(82, 82, 90));
         graphics.fillRect(20, 100, 88, 10);
         graphics.setColor(new Color(112, 112, 122));
-        graphics.fillRect(28, 0, 72, 100);
+        graphics.fillRect(28, 8, 72, 92);
         graphics.setColor(new Color(145, 145, 154));
-        graphics.fillRect(38, 0, 52, 92);
+        graphics.fillRect(38, 16, 52, 84);
     }
 
     private static String displayTitle(LoadedMotif motif, TradingCardMetadata metadata) {

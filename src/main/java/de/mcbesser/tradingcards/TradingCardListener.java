@@ -166,8 +166,9 @@ public final class TradingCardListener implements Listener {
         if (!event.getPlayer().hasPermission("tradingcards.place")) {
             return;
         }
-        if (plugin.getCardService().toggleHidden(frame.getItem())) {
-            frame.setItem(frame.getItem(), false);
+        ItemStack item = frame.getItem();
+        if (plugin.getCardService().toggleHidden(item)) {
+            frame.setItem(item, false);
         }
     }
 
