@@ -111,9 +111,9 @@ public final class MetadataMapRenderer extends MapRenderer {
     private static void drawStatGrid(Graphics2D graphics, de.mcbesser.tradingcards.CardStats stats, TradingCardMetadata metadata) {
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 10));
         drawStatCell(graphics, 14, 72, new Color(220, 70, 70), "Leben", "\u2665", stats.health(), 5, 9);
-        drawStatCell(graphics, 76, 72, new Color(214, 153, 64), "Hunger", "\u25C6", stats.hunger(), 5, 8);
+        drawStatCell(graphics, 74, 72, new Color(214, 153, 64), "Hunger", "\u25C6", stats.hunger(), 5, 8);
         drawStatCell(graphics, 14, 91, new Color(120, 170, 220), "R\u00FCstung", "\u25A0", stats.armor(), 5, 8);
-        drawStatCell(graphics, 76, 91, new Color(186, 120, 220), "Kraft", "\u2736", stats.strength(), 5, 7);
+        drawStatCell(graphics, 74, 91, new Color(186, 120, 220), "Kraft", "\u2736", stats.strength(), 5, 7);
 
         double multiplier = rarityMultiplier(metadata.rarity());
         int cardValue = cardValue(stats, multiplier);
@@ -121,8 +121,8 @@ public final class MetadataMapRenderer extends MapRenderer {
 
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 9));
         graphics.setColor(rarityColor(metadata.rarity()));
-        graphics.drawString(rarityText + " x " + formatMultiplier(multiplier), 18, 114);
-        graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 11));
+        graphics.drawString(rarityText + " x " + formatMultiplier(multiplier), 18, 115);
+        graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
         graphics.setColor(new Color(235, 210, 120));
         String valueText = "= " + cardValue;
         graphics.drawString(valueText, 123 - graphics.getFontMetrics().stringWidth(valueText), 126);
