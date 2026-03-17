@@ -24,14 +24,15 @@ public final class TradingCardsPlugin extends JavaPlugin {
         reloadMotifs();
         registerCommands();
         getServer().getPluginManager().registerEvents(new TradingCardListener(this), this);
+        getServer().getScheduler().runTask(this, () -> cardService.rebindLoadedMaps());
     }
 
     public void reloadMotifs() {
         try {
             motifRegistry.reload();
-            getLogger().info("Loaded " + motifRegistry.getMotifCount() + " motif(s).");
+            getLogger().info(motifRegistry.getMotifCount() + " Motiv(e) geladen.");
         } catch (IOException exception) {
-            getLogger().severe("Failed to load motifs: " + exception.getMessage());
+            getLogger().severe("Motive konnten nicht geladen werden: " + exception.getMessage());
         }
     }
 

@@ -25,7 +25,7 @@ public final class TradingCardsCommand implements CommandExecutor, TabCompleter 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("tradingcards.admin")) {
-            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            sender.sendMessage(ChatColor.RED + "Du darfst diesen Befehl nicht verwenden.");
             return true;
         }
 
@@ -38,42 +38,42 @@ public final class TradingCardsCommand implements CommandExecutor, TabCompleter 
         if (subCommand.equals("reload")) {
             plugin.reloadConfig();
             plugin.reloadMotifs();
-            sender.sendMessage(ChatColor.GREEN + "TradingCards motifs reloaded.");
+            sender.sendMessage(ChatColor.GREEN + "TradingCards-Motive wurden neu geladen.");
             return true;
         }
 
         if (subCommand.equals("list")) {
             List<String> motifIds = plugin.getMotifRegistry().getMotifIds();
             if (motifIds.isEmpty()) {
-                sender.sendMessage(ChatColor.YELLOW + "No motifs found. Put image files into the motifs folder first.");
+                sender.sendMessage(ChatColor.YELLOW + "Keine Motive gefunden. Lege zuerst Bilddateien in den Motivordner.");
                 return true;
             }
 
-            sender.sendMessage(ChatColor.GOLD + "Available motifs: " + String.join(", ", motifIds));
+            sender.sendMessage(ChatColor.GOLD + "Verfuegbare Motive: " + String.join(", ", motifIds));
             return true;
         }
 
         if (subCommand.equals("give")) {
             if (args.length < 3) {
-                sender.sendMessage(ChatColor.RED + "Usage: /" + label + " give <player> <motif>");
+                sender.sendMessage(ChatColor.RED + "Verwendung: /" + label + " give <spieler> <motiv>");
                 return true;
             }
 
             Player target = Bukkit.getPlayerExact(args[1]);
             if (target == null) {
-                sender.sendMessage(ChatColor.RED + "Player not found: " + args[1]);
+                sender.sendMessage(ChatColor.RED + "Spieler nicht gefunden: " + args[1]);
                 return true;
             }
 
             LoadedMotif motif = plugin.getMotifRegistry().find(args[2]);
             if (motif == null) {
-                sender.sendMessage(ChatColor.RED + "Unknown motif: " + args[2]);
+                sender.sendMessage(ChatColor.RED + "Unbekanntes Motiv: " + args[2]);
                 return true;
             }
 
             ItemStack item = plugin.getCardService().createCardItem(motif);
             target.getInventory().addItem(item);
-            sender.sendMessage(ChatColor.GREEN + "Gave trading card " + motif.id() + " to " + target.getName() + ".");
+            sender.sendMessage(ChatColor.GREEN + "Sammelkarte " + motif.id() + " an " + target.getName() + " gegeben.");
             return true;
         }
 
@@ -116,6 +116,6 @@ public final class TradingCardsCommand implements CommandExecutor, TabCompleter 
     private void sendUsage(CommandSender sender) {
         sender.sendMessage(ChatColor.YELLOW + "/tradingcards list");
         sender.sendMessage(ChatColor.YELLOW + "/tradingcards reload");
-        sender.sendMessage(ChatColor.YELLOW + "/tradingcards give <player> <motif>");
+        sender.sendMessage(ChatColor.YELLOW + "/tradingcards give <spieler> <motiv>");
     }
 }

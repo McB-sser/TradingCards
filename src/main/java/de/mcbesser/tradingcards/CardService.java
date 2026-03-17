@@ -11,7 +11,10 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.MapMeta;
 import org.bukkit.map.MapRenderer;
 import org.bukkit.map.MapView;
@@ -43,8 +46,8 @@ public final class CardService {
 
         meta.setDisplayName(motif.displayName());
         List<String> lore = new ArrayList<>(buildLore(motif));
-        lore.add(ChatColor.YELLOW + "Place on a wall to create");
-        lore.add(ChatColor.YELLOW + "a 1x3 painting display.");
+        lore.add(ChatColor.YELLOW + "Normal platzieren fuer 1x3 Anzeige.");
+        lore.add(ChatColor.YELLOW + "Schleichend platzieren fuer 1x2 Bild.");
         meta.setLore(lore);
 
         PersistentDataContainer data = meta.getPersistentDataContainer();
@@ -54,9 +57,10 @@ public final class CardService {
         return item;
     }
 
-    public List<ItemStack> createPlacedDisplayItems(LoadedMotif motif, String displayId) {
+    public List<ItemStack> createPlacedDisplayItems(LoadedMotif motif, String displayId, boolean includeCardPanel) {
         List<ItemStack> items = new ArrayList<>();
-        for (int panelIndex = 0; panelIndex < 3; panelIndex++) {
+        int panelCount = includeCardPanel ? 3 : 2;
+        for (int panelIndex = 0; panelIndex < panelCount; panelIndex++) {
             ItemStack item = createMapItem(motif, panelIndex, false);
             MapMeta meta = (MapMeta) item.getItemMeta();
             if (meta == null) {
@@ -90,10 +94,10 @@ public final class CardService {
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.DARK_GRAY + "----------------");
         if (metadata.number() != null) {
-            lore.add(ChatColor.YELLOW + "Number: " + ChatColor.WHITE + metadata.number());
+            lore.add(ChatColor.YELLOW + "Nummer: " + ChatColor.WHITE + metadata.number());
         }
         if (metadata.rarity() != null) {
-            lore.add(ChatColor.AQUA + "Rarity: " + ChatColor.WHITE + metadata.rarity());
+            lore.add(ChatColor.AQUA + "Seltenheit: " + ChatColor.WHITE + metadata.rarity());
         }
         if (metadata.title() != null) {
             lore.add(ChatColor.GOLD + "Name: " + ChatColor.WHITE + metadata.title());
@@ -129,6 +133,71 @@ public final class CardService {
         return panelIndexKey;
     }
 
+    public void rebindLoadedMaps() {
+        for (World world : Bukkit.getWorlds()) {
+            world.getEntitiesByClass(ItemFrame.class).forEach(this::rebindFrame);
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            rebindPlayerInventory(player);
+        }
+    }
+
+    public void rebindPlayerInventory(Player player) {
+        PlayerInventory inventory = player.getInventory();
+        rebindContents(inventory.getContents());
+        rebindContents(inventory.getArmorContents());
+        rebindItem(inventory.getItemInOffHand());
+        rebindContents(player.getEnderChest().getContents());
+    }
+
+    public void rebindFrame(ItemFrame frame) {
+        if (!frame.getPersistentDataContainer().has(displayIdKey, PersistentDataType.STRING)) {
+            return;
+        }
+        ItemStack item = frame.getItem();
+        if (item == null || item.getType() != Material.FILLED_MAP) {
+            return;
+        }
+        rebindItem(item);
+        frame.setItem(item, false);
+    }
+
+    public void rebindContents(ItemStack[] items) {
+        if (items == null) {
+            return;
+        }
+        for (ItemStack item : items) {
+            rebindItem(item);
+        }
+    }
+
+    public void rebindItem(ItemStack item) {
+        if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
+            return;
+        }
+        MapMeta meta = (MapMeta) item.getItemMeta();
+        if (meta == null || meta.getMapView() == null) {
+            return;
+        }
+
+        PersistentDataContainer data = meta.getPersistentDataContainer();
+        String motifId = data.get(motifIdKey, PersistentDataType.STRING);
+        if (motifId == null) {
+            return;
+        }
+
+        LoadedMotif motif = plugin.getMotifRegistry().find(motifId);
+        if (motif == null) {
+            return;
+        }
+
+        boolean metadataView = data.has(cardItemKey, PersistentDataType.BYTE);
+        Integer storedPanelIndex = data.get(panelIndexKey, PersistentDataType.INTEGER);
+        int panelIndex = storedPanelIndex != null ? storedPanelIndex : 0;
+        rebindMapView(meta.getMapView(), motif, panelIndex, metadataView);
+        item.setItemMeta(meta);
+    }
+
     private ItemStack createMapItem(LoadedMotif motif, int panelIndex, boolean metadataView) {
         World world = resolveWorld();
         if (world == null) {
@@ -136,15 +205,7 @@ public final class CardService {
         }
 
         MapView mapView = Bukkit.createMap(world);
-        mapView.setTrackingPosition(false);
-        mapView.setUnlimitedTracking(false);
-        mapView.setLocked(true);
-
-        List<MapRenderer> renderers = new ArrayList<>(mapView.getRenderers());
-        for (MapRenderer renderer : renderers) {
-            mapView.removeRenderer(renderer);
-        }
-        mapView.addRenderer(metadataView ? new MetadataMapRenderer(motif) : new PosterMapRenderer(motif, panelIndex));
+        rebindMapView(mapView, motif, panelIndex, metadataView);
 
         ItemStack item = new ItemStack(Material.FILLED_MAP);
         MapMeta meta = (MapMeta) item.getItemMeta();
@@ -156,6 +217,18 @@ public final class CardService {
         return item;
     }
 
+    private void rebindMapView(MapView mapView, LoadedMotif motif, int panelIndex, boolean metadataView) {
+        mapView.setTrackingPosition(false);
+        mapView.setUnlimitedTracking(false);
+        mapView.setLocked(true);
+
+        List<MapRenderer> renderers = new ArrayList<>(mapView.getRenderers());
+        for (MapRenderer renderer : renderers) {
+            mapView.removeRenderer(renderer);
+        }
+        mapView.addRenderer(metadataView ? new MetadataMapRenderer(motif) : new PosterMapRenderer(motif, panelIndex));
+    }
+
     private World resolveWorld() {
         return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
     }
@@ -163,7 +236,7 @@ public final class CardService {
     private List<String> buildLore(LoadedMotif motif) {
         TradingCardMetadata metadata = motif.metadata();
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GOLD + "Trading Card");
+        lore.add(ChatColor.GOLD + "Sammelkarte");
 
         if (metadata.series() != null || metadata.number() != null) {
             StringBuilder line = new StringBuilder(ChatColor.YELLOW.toString());
@@ -179,10 +252,10 @@ public final class CardService {
             lore.add(line.toString());
         }
         if (metadata.rarity() != null) {
-            lore.add(ChatColor.AQUA + "Rarity: " + ChatColor.WHITE + metadata.rarity());
+            lore.add(ChatColor.AQUA + "Seltenheit: " + ChatColor.WHITE + metadata.rarity());
         }
         if (metadata.artist() != null) {
-            lore.add(ChatColor.GRAY + "Artist: " + ChatColor.WHITE + metadata.artist());
+            lore.add(ChatColor.GRAY + "Kuenstler: " + ChatColor.WHITE + metadata.artist());
         }
         if (metadata.description() != null) {
             lore.addAll(wrapLoreLine(ChatColor.WHITE, metadata.description()));

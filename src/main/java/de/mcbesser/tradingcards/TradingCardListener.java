@@ -16,8 +16,10 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.hanging.HangingBreakEvent;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -45,14 +47,14 @@ public final class TradingCardListener implements Listener {
             return;
         }
         if (!event.getPlayer().hasPermission("tradingcards.place")) {
-            event.getPlayer().sendMessage("You do not have permission to place trading cards.");
+            event.getPlayer().sendMessage("Du darfst diese Sammelkarten nicht platzieren.");
             event.setCancelled(true);
             return;
         }
 
         BlockFace face = event.getBlockFace();
         if (face == BlockFace.UP || face == BlockFace.DOWN) {
-            event.getPlayer().sendMessage("This card must be placed on a wall.");
+            event.getPlayer().sendMessage("Diese Karte muss an einer Wand platziert werden.");
             event.setCancelled(true);
             return;
         }
@@ -60,31 +62,52 @@ public final class TradingCardListener implements Listener {
         String motifId = plugin.getCardService().getMotifId(item);
         LoadedMotif motif = motifId == null ? null : plugin.getMotifRegistry().find(motifId);
         if (motif == null) {
-            event.getPlayer().sendMessage("Unknown card motif. Reload the plugin data first.");
+            event.getPlayer().sendMessage("Unbekanntes Kartenmotiv. Lade die Plugin-Daten neu.");
             event.setCancelled(true);
             return;
         }
 
+        boolean includeCardPanel = !event.getPlayer().isSneaking();
+
         Block supportBottom = event.getClickedBlock();
         Block supportMiddle = supportBottom.getRelative(BlockFace.UP);
-        Block supportTop = supportMiddle.getRelative(BlockFace.UP);
+        Block supportTop = includeCardPanel ? supportMiddle.getRelative(BlockFace.UP) : null;
         Block displayBottom = supportBottom.getRelative(face);
         Block displayMiddle = supportMiddle.getRelative(face);
-        Block displayTop = supportTop.getRelative(face);
-        if (!canPlaceDisplay(supportBottom, supportMiddle, supportTop, displayBottom, displayMiddle, displayTop)) {
-            event.getPlayer().sendMessage("Not enough space for a 1x3 card display.");
+        Block displayTop = includeCardPanel ? supportTop.getRelative(face) : null;
+        if (!canPlaceDisplay(includeCardPanel, supportBottom, supportMiddle, supportTop, displayBottom, displayMiddle, displayTop)) {
+            event.getPlayer().sendMessage(includeCardPanel ? "Nicht genug Platz fuer eine 1x3 Kartenanzeige." : "Nicht genug Platz fuer eine 1x2 Bildanzeige.");
             event.setCancelled(true);
             return;
         }
 
         String displayId = UUID.randomUUID().toString();
-        List<ItemStack> panelItems = plugin.getCardService().createPlacedDisplayItems(motif, displayId);
-        spawnFrame(displayBottom.getLocation(), face, panelItems.get(2), displayId, 2);
-        spawnFrame(displayMiddle.getLocation(), face, panelItems.get(1), displayId, 1);
-        spawnFrame(displayTop.getLocation(), face, panelItems.get(0), displayId, 0);
+        List<ItemStack> panelItems = plugin.getCardService().createPlacedDisplayItems(motif, displayId, includeCardPanel);
+        if (includeCardPanel) {
+            spawnFrame(displayBottom.getLocation(), face, panelItems.get(2), displayId, 2);
+            spawnFrame(displayMiddle.getLocation(), face, panelItems.get(1), displayId, 1);
+            spawnFrame(displayTop.getLocation(), face, panelItems.get(0), displayId, 0);
+        } else {
+            spawnFrame(displayBottom.getLocation(), face, panelItems.get(1), displayId, 1);
+            spawnFrame(displayMiddle.getLocation(), face, panelItems.get(0), displayId, 0);
+        }
 
         consumeOne(event.getPlayer(), item);
         event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        plugin.getCardService().rebindPlayerInventory(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof ItemFrame frame) {
+                plugin.getCardService().rebindFrame(frame);
+            }
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -117,13 +140,12 @@ public final class TradingCardListener implements Listener {
         breakDisplay((ItemFrame) event.getEntity(), null);
     }
 
-    private boolean canPlaceDisplay(Block supportBottom, Block supportMiddle, Block supportTop, Block displayBottom, Block displayMiddle, Block displayTop) {
+    private boolean canPlaceDisplay(boolean includeCardPanel, Block supportBottom, Block supportMiddle, Block supportTop, Block displayBottom, Block displayMiddle, Block displayTop) {
         return supportBottom.getType().isSolid()
             && supportMiddle.getType().isSolid()
-            && supportTop.getType().isSolid()
             && displayBottom.getType().isAir()
             && displayMiddle.getType().isAir()
-            && displayTop.getType().isAir();
+            && (!includeCardPanel || (supportTop != null && supportTop.getType().isSolid() && displayTop != null && displayTop.getType().isAir()));
     }
 
     private void spawnFrame(Location location, BlockFace face, ItemStack item, String displayId, int panelIndex) {
