@@ -41,25 +41,18 @@ public final class MetadataMapRenderer extends MapRenderer {
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
 
         TradingCardMetadata metadata = motif.metadata();
-        graphics.setColor(new Color(20, 24, 30));
+        graphics.setColor(new Color(42, 42, 46));
         graphics.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-
-        graphics.setColor(new Color(215, 188, 111));
-        graphics.fillRect(8, 8, MAP_SIZE - 16, MAP_SIZE - 16);
-
-        graphics.setColor(new Color(34, 39, 48));
-        graphics.fillRect(12, 12, MAP_SIZE - 24, MAP_SIZE - 24);
-
-        graphics.setColor(new Color(52, 60, 72));
-        graphics.fillRect(12, 34, MAP_SIZE - 24, 2);
-        graphics.fillRect(12, 54, MAP_SIZE - 24, 1);
-        graphics.fillRect(12, 92, MAP_SIZE - 24, 1);
+        graphics.setColor(new Color(70, 70, 78));
+        graphics.fillRect(10, 30, MAP_SIZE - 20, 1);
+        graphics.fillRect(10, 52, MAP_SIZE - 20, 1);
+        graphics.fillRect(10, 112, MAP_SIZE - 20, 1);
 
         graphics.setColor(Color.WHITE);
-        graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 10));
-        drawCenteredLines(graphics, limitLines(wrapText(displayTitle(motif, metadata), 14), 2), 21, 10);
+        graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
+        drawCenteredLines(graphics, limitLines(wrapText(displayTitle(motif, metadata), 13), 2), 18, 12);
 
-        graphics.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 8));
+        graphics.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
         List<String> header = new ArrayList<>();
         if (metadata.number() != null) {
             header.add("#" + metadata.number());
@@ -68,24 +61,19 @@ public final class MetadataMapRenderer extends MapRenderer {
             header.add(metadata.rarity());
         }
         if (!header.isEmpty()) {
-            drawCenteredLines(graphics, List.of(String.join("  ", header)), 46, 9);
+            drawCenteredLines(graphics, List.of(String.join("  ", header)), 44, 10);
         }
 
-        graphics.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 8));
-        int y = 66;
+        drawCenteredColoredLines(
+            graphics,
+            limitLines(wrapText(metadata.description(), 16), 4),
+            76,
+            10,
+            new Color(235, 235, 235)
+        );
+
         if (metadata.series() != null) {
-            y = drawLeftLines(graphics, limitLines(wrapText("Set: " + metadata.series(), 16), 1), y, 9, new Color(144, 203, 157));
-            y += 3;
-        }
-        y = drawLeftLines(graphics, limitLines(wrapText(metadata.description(), 15), 3), y, 9, new Color(230, 230, 230));
-        y += 4;
-        y = drawLeftLines(graphics, limitLines(wrapText(metadata.flavorText(), 15), 2), y, 9, new Color(172, 172, 172));
-        y = Math.max(y, 98);
-        if (!metadata.tags().isEmpty()) {
-            y = drawLeftLines(graphics, limitLines(wrapText("Tags: " + String.join(", ", metadata.tags()), 16), 1), y + 2, 8, new Color(144, 203, 157));
-        }
-        if (metadata.artist() != null) {
-            y = drawLeftLines(graphics, limitLines(wrapText("Artist: " + metadata.artist(), 16), 1), y + 2, 8, new Color(194, 194, 194));
+            drawCenteredLines(graphics, limitLines(wrapText(metadata.series(), 16), 1), 123, 9);
         }
 
         graphics.dispose();
@@ -112,6 +100,11 @@ public final class MetadataMapRenderer extends MapRenderer {
             startY += lineHeight;
         }
         return startY;
+    }
+
+    private static void drawCenteredColoredLines(Graphics2D graphics, List<String> lines, int startY, int lineHeight, Color color) {
+        graphics.setColor(color);
+        drawCenteredLines(graphics, lines, startY, lineHeight);
     }
 
     private static List<String> wrapText(String text, int maxChars) {

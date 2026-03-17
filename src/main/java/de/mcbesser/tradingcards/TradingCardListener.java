@@ -14,7 +14,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.hanging.HangingBreakEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -108,6 +111,40 @@ public final class TradingCardListener implements Listener {
                 plugin.getCardService().rebindFrame(frame);
             }
         }
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            plugin.getCardService().rebindItem(event.getCurrentItem());
+            plugin.getCardService().rebindItem(event.getCursor());
+            plugin.getCardService().rebindPlayerInventory((Player) event.getWhoClicked());
+        });
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            plugin.getCardService().rebindPlayerInventory((Player) event.getWhoClicked());
+            event.getNewItems().values().forEach(plugin.getCardService()::rebindItem);
+        });
+    }
+
+    @EventHandler
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            plugin.getCardService().rebindItem(event.getItem().getItemStack());
+            plugin.getCardService().rebindPlayerInventory(player);
+        });
     }
 
     @EventHandler(ignoreCancelled = true)
