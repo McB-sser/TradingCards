@@ -159,8 +159,15 @@ public final class TradingCardListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractFrame(PlayerInteractEntityEvent event) {
-        if (isTradingCardFrame(event.getRightClicked())) {
-            event.setCancelled(true);
+        if (!(event.getRightClicked() instanceof ItemFrame frame) || !isTradingCardFrame(frame)) {
+            return;
+        }
+        event.setCancelled(true);
+        if (!event.getPlayer().hasPermission("tradingcards.place")) {
+            return;
+        }
+        if (plugin.getCardService().toggleHidden(frame.getItem())) {
+            frame.setItem(frame.getItem(), false);
         }
     }
 

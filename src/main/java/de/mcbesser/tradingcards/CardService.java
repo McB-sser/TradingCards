@@ -29,6 +29,8 @@ public final class CardService {
     private final NamespacedKey displayIdKey;
     private final NamespacedKey panelIndexKey;
     private final NamespacedKey displayPanelCountKey;
+    private final NamespacedKey metadataPanelKey;
+    private final NamespacedKey hiddenPanelKey;
     private final NamespacedKey healthKey;
     private final NamespacedKey hungerKey;
     private final NamespacedKey armorKey;
@@ -41,6 +43,8 @@ public final class CardService {
         this.displayIdKey = new NamespacedKey(plugin, "display_id");
         this.panelIndexKey = new NamespacedKey(plugin, "panel_index");
         this.displayPanelCountKey = new NamespacedKey(plugin, "display_panel_count");
+        this.metadataPanelKey = new NamespacedKey(plugin, "metadata_panel");
+        this.hiddenPanelKey = new NamespacedKey(plugin, "hidden_panel");
         this.healthKey = new NamespacedKey(plugin, "stat_health");
         this.hungerKey = new NamespacedKey(plugin, "stat_hunger");
         this.armorKey = new NamespacedKey(plugin, "stat_armor");
@@ -52,7 +56,7 @@ public final class CardService {
     }
 
     public ItemStack createCardItem(LoadedMotif motif, CardStats stats) {
-        ItemStack item = createMapItem(motif, 0, true, stats, 1);
+        ItemStack item = createMapItem(motif, 0, true, false, stats, 1);
         MapMeta meta = (MapMeta) item.getItemMeta();
         if (meta == null) {
             throw new IllegalStateException("MapMeta is not available.");
@@ -76,12 +80,14 @@ public final class CardService {
     public List<ItemStack> createPlacedDisplayItems(LoadedMotif motif, String displayId, int panelCount, boolean metadataOnly, CardStats stats) {
         List<ItemStack> items = new ArrayList<>();
         for (int panelIndex = 0; panelIndex < panelCount; panelIndex++) {
-            ItemStack item = createMapItem(motif, panelIndex, metadataOnly, stats, panelCount);
+            boolean metadataPanel = metadataOnly || (panelCount == 3 && panelIndex == 2);
+            boolean hiddenPanel = metadataPanel;
+            ItemStack item = createMapItem(motif, panelIndex, metadataPanel, hiddenPanel, stats, panelCount);
             MapMeta meta = (MapMeta) item.getItemMeta();
             if (meta == null) {
                 throw new IllegalStateException("MapMeta is not available.");
             }
-            if (!metadataOnly && panelIndex == 0) {
+            if (!metadataPanel && panelIndex == 0) {
                 meta.setDisplayName(buildTopPanelName(motif));
                 meta.setLore(buildTopPanelLore(motif));
             } else {
@@ -93,6 +99,12 @@ public final class CardService {
             data.set(panelIndexKey, PersistentDataType.INTEGER, panelIndex);
             data.set(displayPanelCountKey, PersistentDataType.INTEGER, panelCount);
             data.set(motifIdKey, PersistentDataType.STRING, motif.id());
+            if (metadataPanel) {
+                data.set(metadataPanelKey, PersistentDataType.BYTE, (byte) 1);
+            }
+            if (hiddenPanel) {
+                data.set(hiddenPanelKey, PersistentDataType.BYTE, (byte) 1);
+            }
             storeStats(data, stats);
             item.setItemMeta(meta);
             items.add(item);
@@ -148,6 +160,37 @@ public final class CardService {
 
     public NamespacedKey getPanelIndexKey() {
         return panelIndexKey;
+    }
+
+    public boolean isMetadataPanel(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return false;
+        }
+        PersistentDataContainer data = item.getItemMeta().getPersistentDataContainer();
+        return data.has(metadataPanelKey, PersistentDataType.BYTE) || data.has(cardItemKey, PersistentDataType.BYTE);
+    }
+
+    public boolean toggleHidden(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return false;
+        }
+        MapMeta meta = (MapMeta) item.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
+        PersistentDataContainer data = meta.getPersistentDataContainer();
+        if (!data.has(metadataPanelKey, PersistentDataType.BYTE)) {
+            return false;
+        }
+        boolean hidden = data.has(hiddenPanelKey, PersistentDataType.BYTE);
+        if (hidden) {
+            data.remove(hiddenPanelKey);
+        } else {
+            data.set(hiddenPanelKey, PersistentDataType.BYTE, (byte) 1);
+        }
+        item.setItemMeta(meta);
+        rebindItem(item);
+        return true;
     }
 
     public CardStats getStats(ItemStack item) {
@@ -233,7 +276,10 @@ public final class CardService {
             storeStats(data, stats);
         }
 
-        boolean metadataView = data.has(cardItemKey, PersistentDataType.BYTE) || Integer.valueOf(1).equals(data.get(displayPanelCountKey, PersistentDataType.INTEGER));
+        boolean metadataView = data.has(cardItemKey, PersistentDataType.BYTE)
+            || data.has(metadataPanelKey, PersistentDataType.BYTE)
+            || Integer.valueOf(1).equals(data.get(displayPanelCountKey, PersistentDataType.INTEGER));
+        boolean hiddenPanel = data.has(hiddenPanelKey, PersistentDataType.BYTE);
         Integer storedPanelIndex = data.get(panelIndexKey, PersistentDataType.INTEGER);
         int panelIndex = storedPanelIndex != null ? storedPanelIndex : 0;
         Integer storedPanelCount = data.get(displayPanelCountKey, PersistentDataType.INTEGER);
@@ -245,18 +291,18 @@ public final class CardService {
         } else {
             panelCount = panelIndex >= 2 ? 3 : 2;
         }
-        rebindMapView(meta.getMapView(), motif, panelIndex, metadataView, stats, panelCount);
+        rebindMapView(meta.getMapView(), motif, panelIndex, metadataView, hiddenPanel, stats, panelCount);
         item.setItemMeta(meta);
     }
 
-    private ItemStack createMapItem(LoadedMotif motif, int panelIndex, boolean metadataView, CardStats stats, int panelCount) {
+    private ItemStack createMapItem(LoadedMotif motif, int panelIndex, boolean metadataView, boolean hiddenPanel, CardStats stats, int panelCount) {
         World world = resolveWorld();
         if (world == null) {
             throw new IllegalStateException("No loaded world available for creating maps.");
         }
 
         MapView mapView = Bukkit.createMap(world);
-        rebindMapView(mapView, motif, panelIndex, metadataView, stats, panelCount);
+        rebindMapView(mapView, motif, panelIndex, metadataView, hiddenPanel, stats, panelCount);
 
         ItemStack item = new ItemStack(Material.FILLED_MAP);
         MapMeta meta = (MapMeta) item.getItemMeta();
@@ -268,7 +314,7 @@ public final class CardService {
         return item;
     }
 
-    private void rebindMapView(MapView mapView, LoadedMotif motif, int panelIndex, boolean metadataView, CardStats stats, int panelCount) {
+    private void rebindMapView(MapView mapView, LoadedMotif motif, int panelIndex, boolean metadataView, boolean hiddenPanel, CardStats stats, int panelCount) {
         mapView.setTrackingPosition(false);
         mapView.setUnlimitedTracking(false);
         mapView.setLocked(true);
@@ -277,7 +323,9 @@ public final class CardService {
         for (MapRenderer renderer : renderers) {
             mapView.removeRenderer(renderer);
         }
-        mapView.addRenderer(metadataView ? new MetadataMapRenderer(motif, stats) : new PosterMapRenderer(motif, panelIndex, stats, panelCount));
+        mapView.addRenderer(metadataView
+            ? new MetadataMapRenderer(motif, stats, hiddenPanel, panelCount == 1)
+            : new PosterMapRenderer(motif, panelIndex, stats, panelCount));
     }
 
     private World resolveWorld() {

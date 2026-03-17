@@ -23,9 +23,9 @@ public final class MetadataMapRenderer extends MapRenderer {
     private final BufferedImage image;
     private boolean rendered;
 
-    public MetadataMapRenderer(LoadedMotif motif, de.mcbesser.tradingcards.CardStats stats) {
+    public MetadataMapRenderer(LoadedMotif motif, de.mcbesser.tradingcards.CardStats stats, boolean hidden, boolean standalone) {
         super(true);
-        this.image = createCardImage(motif, stats);
+        this.image = createCardImage(motif, stats, hidden, standalone);
     }
 
     @Override
@@ -37,7 +37,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         rendered = true;
     }
 
-    public static BufferedImage createCardImage(LoadedMotif motif, de.mcbesser.tradingcards.CardStats stats) {
+    public static BufferedImage createCardImage(LoadedMotif motif, de.mcbesser.tradingcards.CardStats stats, boolean hidden, boolean standalone) {
         BufferedImage card = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = card.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
@@ -46,6 +46,11 @@ public final class MetadataMapRenderer extends MapRenderer {
         TradingCardMetadata metadata = motif.metadata();
         graphics.setColor(new Color(42, 42, 46));
         graphics.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        if (hidden) {
+            drawHiddenCard(graphics, standalone);
+            graphics.dispose();
+            return MapPalette.resizeImage(card);
+        }
         graphics.setColor(new Color(36, 36, 40));
         graphics.fillRect(0, 0, 14, MAP_SIZE);
         graphics.setColor(new Color(80, 80, 88));
@@ -74,6 +79,27 @@ public final class MetadataMapRenderer extends MapRenderer {
 
         graphics.dispose();
         return MapPalette.resizeImage(card);
+    }
+
+    private static void drawHiddenCard(Graphics2D graphics, boolean standalone) {
+        graphics.setColor(new Color(34, 34, 38));
+        graphics.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        if (standalone) {
+            graphics.setColor(new Color(88, 88, 96));
+            graphics.fillRoundRect(22, 18, 84, 92, 8, 8);
+            graphics.setColor(new Color(150, 150, 160));
+            graphics.fillRect(34, 84, 60, 8);
+            graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 32));
+            graphics.setColor(Color.WHITE);
+            graphics.drawString("?", 56, 65);
+            return;
+        }
+        graphics.setColor(new Color(82, 82, 90));
+        graphics.fillRect(20, 100, 88, 10);
+        graphics.setColor(new Color(112, 112, 122));
+        graphics.fillRect(28, 0, 72, 100);
+        graphics.setColor(new Color(145, 145, 154));
+        graphics.fillRect(38, 0, 52, 92);
     }
 
     private static String displayTitle(LoadedMotif motif, TradingCardMetadata metadata) {
@@ -110,8 +136,8 @@ public final class MetadataMapRenderer extends MapRenderer {
 
     private static void drawStatGrid(Graphics2D graphics, de.mcbesser.tradingcards.CardStats stats, TradingCardMetadata metadata) {
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 10));
-        drawStatCell(graphics, 14, 72, new Color(220, 70, 70), "Leben", "\u2665", stats.health(), 5, 9);
-        drawStatCell(graphics, 74, 72, new Color(214, 153, 64), "Hunger", "\u25C6", stats.hunger(), 5, 8);
+        drawStatCell(graphics, 14, 72, new Color(220, 70, 70), "Leben", "\u2665", stats.health(), 5, 8);
+        drawStatCell(graphics, 74, 72, new Color(214, 153, 64), "Hunger", "\u25C6", stats.hunger(), 5, 7);
         drawStatCell(graphics, 14, 91, new Color(120, 170, 220), "R\u00FCstung", "\u25A0", stats.armor(), 5, 8);
         drawStatCell(graphics, 74, 91, new Color(186, 120, 220), "Kraft", "\u2736", stats.strength(), 5, 7);
 
@@ -125,7 +151,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 12));
         graphics.setColor(new Color(235, 210, 120));
         String valueText = String.valueOf(cardValue);
-        graphics.drawString(valueText, 123 - graphics.getFontMetrics().stringWidth(valueText), 126);
+        graphics.drawString(valueText, 123 - graphics.getFontMetrics().stringWidth(valueText), 125);
     }
 
     private static void drawStatCell(Graphics2D graphics, int x, int y, Color color, String label, String icon, int value, int maxSymbols, int stepWidth) {

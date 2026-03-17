@@ -23,7 +23,7 @@ public final class PosterMapRenderer extends MapRenderer {
         Graphics2D graphics = display.createGraphics();
         graphics.drawImage(motif.image(), 0, 0, null);
         if (panelCount == 3) {
-            graphics.drawImage(MetadataMapRenderer.createCardImage(motif, stats), 0, MAP_SIZE * 2, null);
+            graphics.drawImage(MetadataMapRenderer.createCardImage(motif, stats, false, false), 0, MAP_SIZE * 2, null);
         }
         graphics.dispose();
         BufferedImage slice = display.getSubimage(0, segmentIndex * MAP_SIZE, MAP_SIZE, MAP_SIZE);
