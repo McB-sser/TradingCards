@@ -18,6 +18,7 @@ import org.bukkit.block.DoubleChest;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Interaction;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -94,15 +95,44 @@ public final class QuartettService {
         return ensureSession(leftChest.getBlock());
     }
 
-    public boolean isQuartettHologram(Entity entity) {
-        if (!(entity instanceof ArmorStand stand)) {
-            return false;
-        }
-        return stand.getPersistentDataContainer().has(quartettSessionKey, PersistentDataType.STRING);
+    public boolean isQuartettChest(Block block) {
+        return resolveQuartettChest(block) != null;
     }
 
-    public boolean handleHologramInteract(Player player, ArmorStand stand) {
-        PersistentDataContainer data = stand.getPersistentDataContainer();
+    public void cleanupSession(Block block, boolean dropCards) {
+        Session session = sessionForBlock(block);
+        if (session == null) {
+            return;
+        }
+        if (dropCards) {
+            dropStoredCards(session, block.getLocation().add(0.5, 0.5, 0.5));
+        }
+        Inventory inventory = session.inventory();
+        if (inventory != null) {
+            inventory.clear();
+        }
+        session.clearWorldState();
+        sessions.remove(session.id);
+    }
+
+    public void shutdown() {
+        List<Session> existing = new ArrayList<>(sessions.values());
+        for (Session session : existing) {
+            Inventory inventory = session.inventory();
+            if (inventory != null) {
+                inventory.clear();
+            }
+            session.clearWorldState();
+        }
+        sessions.clear();
+    }
+
+    public boolean isQuartettHologram(Entity entity) {
+        return entity != null && entity.getPersistentDataContainer().has(quartettSessionKey, PersistentDataType.STRING);
+    }
+
+    public boolean handleHologramInteract(Player player, Entity entity) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
         String sessionId = data.get(quartettSessionKey, PersistentDataType.STRING);
         String type = data.get(quartettTypeKey, PersistentDataType.STRING);
         String side = data.get(quartettSideKey, PersistentDataType.STRING);
@@ -239,6 +269,7 @@ public final class QuartettService {
 
         source.remove(index);
         player.getInventory().addItem(item.clone()).values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+        resetParticipants(session);
         refresh(session);
     }
 
@@ -383,6 +414,24 @@ public final class QuartettService {
         frame.remove();
     }
 
+    private void dropStoredCards(Session session, Location location) {
+        for (ItemStack item : session.dropItems()) {
+            location.getWorld().dropItemNaturally(location, item);
+        }
+    }
+
+    private Session sessionForBlock(Block block) {
+        if (block == null) {
+            return null;
+        }
+        for (Session session : sessions.values()) {
+            if (session.usesBlock(block)) {
+                return session;
+            }
+        }
+        return null;
+    }
+
     private int modeValue(CompareMode mode, ItemStack item) {
         CardStats stats = plugin.getCardService().getStats(item);
         return switch (mode) {
@@ -411,8 +460,16 @@ public final class QuartettService {
 
     private void spawnHolograms(Session session) {
         session.centerStand = spawnStand(session.centerLocation(), "center", null);
-        session.slotStands.put(Side.LEFT, spawnStand(session.sideLocation(Side.LEFT), "slot", Side.LEFT));
-        session.slotStands.put(Side.RIGHT, spawnStand(session.sideLocation(Side.RIGHT), "slot", Side.RIGHT));
+        session.centerStand.setRotation(yawForFacing(session.facing), 0.0F);
+        session.centerInteraction = spawnInteraction(session.centerLocation().clone().add(0.0, -0.25, 0.0), "center", null, 1.2F, 0.9F);
+        ArmorStand leftStand = spawnStand(session.sideLocation(Side.LEFT), "slot", Side.LEFT);
+        leftStand.setRotation(yawForFacing(session.facing), 0.0F);
+        session.slotStands.put(Side.LEFT, leftStand);
+        ArmorStand rightStand = spawnStand(session.sideLocation(Side.RIGHT), "slot", Side.RIGHT);
+        rightStand.setRotation(yawForFacing(session.facing), 0.0F);
+        session.slotStands.put(Side.RIGHT, rightStand);
+        session.slotInteractions.put(Side.LEFT, spawnInteraction(session.sideLocation(Side.LEFT).clone().add(0.0, -0.2, 0.0), "slot", Side.LEFT, 1.0F, 0.9F));
+        session.slotInteractions.put(Side.RIGHT, spawnInteraction(session.sideLocation(Side.RIGHT).clone().add(0.0, -0.2, 0.0), "slot", Side.RIGHT, 1.0F, 0.9F));
     }
 
     private ArmorStand spawnStand(Location location, String type, Side side) {
@@ -432,8 +489,23 @@ public final class QuartettService {
         });
     }
 
+    private Interaction spawnInteraction(Location location, String type, Side side, float width, float height) {
+        return location.getWorld().spawn(location, Interaction.class, interaction -> {
+            interaction.setResponsive(true);
+            interaction.setInteractionWidth(width);
+            interaction.setInteractionHeight(height);
+            PersistentDataContainer data = interaction.getPersistentDataContainer();
+            data.set(quartettSessionKey, PersistentDataType.STRING, "");
+            data.set(quartettTypeKey, PersistentDataType.STRING, type);
+            if (side != null) {
+                data.set(quartettSideKey, PersistentDataType.STRING, side.name());
+            }
+        });
+    }
+
     private void updateHolograms(Session session) {
         stamp(session.centerStand, session.id, "center", null);
+        stamp(session.centerInteraction, session.id, "center", null);
         session.centerStand.setCustomName("Quartett: " + session.mode.label);
 
         updateSideStand(session, Side.LEFT);
@@ -442,25 +514,24 @@ public final class QuartettService {
 
     private void updateSideStand(Session session, Side side) {
         ArmorStand stand = session.slotStands.get(side);
+        Interaction interaction = session.slotInteractions.get(side);
         stamp(stand, session.id, "slot", side);
+        stamp(interaction, session.id, "slot", side);
         stand.setGlowing(false);
         stand.getEquipment().setHelmet(null);
+        stand.setCustomName("?");
 
         UUID playerId = session.players.get(side);
         if (playerId == null) {
-            stand.setCustomName("?");
             return;
         }
 
         Player player = Bukkit.getPlayer(playerId);
-        String name = player != null ? player.getName() : "Spieler";
+        stand.setCustomName(null);
         if (session.winner == side) {
-            stand.setCustomName("\u00A7a" + name);
-        } else if (session.chooser == side) {
-            stand.setCustomName("\u00A7e" + name);
             stand.setGlowing(true);
-        } else {
-            stand.setCustomName("\u00A7f" + name);
+        } else if (session.chooser == side) {
+            stand.setGlowing(true);
         }
 
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
@@ -472,8 +543,8 @@ public final class QuartettService {
         stand.getEquipment().setHelmet(head);
     }
 
-    private void stamp(ArmorStand stand, String sessionId, String type, Side side) {
-        PersistentDataContainer data = stand.getPersistentDataContainer();
+    private void stamp(Entity entity, String sessionId, String type, Side side) {
+        PersistentDataContainer data = entity.getPersistentDataContainer();
         data.set(quartettSessionKey, PersistentDataType.STRING, sessionId);
         data.set(quartettTypeKey, PersistentDataType.STRING, type);
         if (side != null) {
@@ -640,6 +711,16 @@ public final class QuartettService {
         return chestData.getFacing();
     }
 
+    private float yawForFacing(BlockFace facing) {
+        return switch (facing) {
+            case NORTH -> 180.0F;
+            case SOUTH -> 0.0F;
+            case WEST -> 90.0F;
+            case EAST -> -90.0F;
+            default -> 0.0F;
+        };
+    }
+
     private String sessionId(Block left, Block right) {
         String a = left.getWorld().getName() + ":" + left.getX() + ":" + left.getY() + ":" + left.getZ();
         String b = right.getWorld().getName() + ":" + right.getX() + ":" + right.getY() + ":" + right.getZ();
@@ -703,12 +784,14 @@ public final class QuartettService {
         private final BlockFace facing;
         private final Map<Side, UUID> players = new EnumMap<>(Side.class);
         private final Map<Side, ArmorStand> slotStands = new EnumMap<>(Side.class);
+        private final Map<Side, Interaction> slotInteractions = new EnumMap<>(Side.class);
         private final Map<Side, ItemFrame> cardFrames = new EnumMap<>(Side.class);
         private final Map<Side, ItemStack> roundCards = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> ownCards = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> newCards = new EnumMap<>(Side.class);
         private final Map<Side, Integer> pages = new EnumMap<>(Side.class);
         private ArmorStand centerStand;
+        private Interaction centerInteraction;
         private CompareMode mode = CompareMode.LEBEN;
         private TransferMode transferMode = TransferMode.NONE;
         private Side chooser = Side.LEFT;
@@ -737,9 +820,15 @@ public final class QuartettService {
             if (centerStand != null) {
                 centerStand.remove();
             }
+            if (centerInteraction != null) {
+                centerInteraction.remove();
+            }
             slotStands.values().forEach(ArmorStand::remove);
+            slotInteractions.values().forEach(Interaction::remove);
             slotStands.clear();
+            slotInteractions.clear();
             centerStand = null;
+            centerInteraction = null;
         }
 
         private Side sideOf(UUID playerId) {
@@ -760,7 +849,7 @@ public final class QuartettService {
 
         private Location sideLocation(Side side) {
             Block block = side == Side.LEFT ? leftBlock : rightBlock;
-            return block.getLocation().add(0.5, 1.55, 0.5);
+            return block.getLocation().add(0.5, 1.05, 0.5);
         }
 
         private Block cardBlock(Side side) {
@@ -774,5 +863,23 @@ public final class QuartettService {
             }
             return chest.getInventory();
         }
+
+        private boolean usesBlock(Block block) {
+            return leftBlock.equals(block) || rightBlock.equals(block);
+        }
+
+        private List<ItemStack> dropItems() {
+            List<ItemStack> items = new ArrayList<>();
+            ownCards.values().forEach(list -> list.forEach(item -> items.add(item.clone())));
+            newCards.values().forEach(list -> list.forEach(item -> items.add(item.clone())));
+            return items;
+        }
+    }
+
+    private void resetParticipants(Session session) {
+        session.players.clear();
+        session.chooser = Side.LEFT;
+        session.winner = null;
+        session.transferMode = TransferMode.NONE;
     }
 }

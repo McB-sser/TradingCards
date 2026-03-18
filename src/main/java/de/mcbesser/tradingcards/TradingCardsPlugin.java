@@ -30,6 +30,13 @@ public final class TradingCardsPlugin extends JavaPlugin {
         getServer().getScheduler().runTask(this, () -> cardService.rebindLoadedMaps());
     }
 
+    @Override
+    public void onDisable() {
+        if (quartettService != null) {
+            quartettService.shutdown();
+        }
+    }
+
     public void reloadMotifs() {
         try {
             motifRegistry.reload();

@@ -1,11 +1,12 @@
 package de.mcbesser.tradingcards;
 
 import org.bukkit.block.Block;
-import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -45,6 +46,14 @@ public final class QuartettListener implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
+    public void onQuartettChestBreak(BlockBreakEvent event) {
+        if (!quartettService.isQuartettChest(event.getBlock())) {
+            return;
+        }
+        quartettService.cleanupSession(event.getBlock(), true);
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onQuartettInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof org.bukkit.entity.Player player)) {
             return;
@@ -64,10 +73,11 @@ public final class QuartettListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onQuartettHologramInteract(PlayerInteractEntityEvent event) {
-        if (!(event.getRightClicked() instanceof ArmorStand stand) || !quartettService.isQuartettHologram(stand)) {
+        Entity clicked = event.getRightClicked();
+        if (!quartettService.isQuartettHologram(clicked)) {
             return;
         }
         event.setCancelled(true);
-        quartettService.handleHologramInteract(event.getPlayer(), stand);
+        quartettService.handleHologramInteract(event.getPlayer(), clicked);
     }
 }
