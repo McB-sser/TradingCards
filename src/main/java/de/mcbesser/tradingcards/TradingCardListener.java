@@ -167,6 +167,11 @@ public final class TradingCardListener implements Listener {
             return;
         }
         ItemStack item = frame.getItem();
+        java.util.UUID owner = plugin.getCardService().getOwner(item);
+        if (owner != null && !owner.equals(event.getPlayer().getUniqueId())) {
+            event.getPlayer().sendMessage("Nur der Besitzer kann diese Karte aufdecken.");
+            return;
+        }
         if (plugin.getCardService().toggleHidden(item)) {
             frame.setItem(item, false);
         }
@@ -175,6 +180,10 @@ public final class TradingCardListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onDamageFrame(EntityDamageByEntityEvent event) {
         if (!isTradingCardFrame(event.getEntity())) {
+            return;
+        }
+        if (plugin.getCardService().getOwner(((ItemFrame) event.getEntity()).getItem()) != null) {
+            event.setCancelled(true);
             return;
         }
         Player player = event.getDamager() instanceof Player ? (Player) event.getDamager() : null;
@@ -189,6 +198,10 @@ public final class TradingCardListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onBreakFrame(HangingBreakEvent event) {
         if (!isTradingCardFrame(event.getEntity())) {
+            return;
+        }
+        if (plugin.getCardService().getOwner(((ItemFrame) event.getEntity()).getItem()) != null) {
+            event.setCancelled(true);
             return;
         }
         event.setCancelled(true);

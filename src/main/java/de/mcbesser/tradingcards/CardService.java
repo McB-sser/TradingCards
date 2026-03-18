@@ -6,6 +6,7 @@ import de.mcbesser.tradingcards.image.PosterMapRenderer;
 import de.mcbesser.tradingcards.image.TradingCardMetadata;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -31,6 +32,7 @@ public final class CardService {
     private final NamespacedKey displayPanelCountKey;
     private final NamespacedKey metadataPanelKey;
     private final NamespacedKey hiddenPanelKey;
+    private final NamespacedKey ownerKey;
     private final NamespacedKey healthKey;
     private final NamespacedKey hungerKey;
     private final NamespacedKey armorKey;
@@ -45,6 +47,7 @@ public final class CardService {
         this.displayPanelCountKey = new NamespacedKey(plugin, "display_panel_count");
         this.metadataPanelKey = new NamespacedKey(plugin, "metadata_panel");
         this.hiddenPanelKey = new NamespacedKey(plugin, "hidden_panel");
+        this.ownerKey = new NamespacedKey(plugin, "card_owner");
         this.healthKey = new NamespacedKey(plugin, "stat_health");
         this.hungerKey = new NamespacedKey(plugin, "stat_hunger");
         this.armorKey = new NamespacedKey(plugin, "stat_armor");
@@ -168,6 +171,40 @@ public final class CardService {
         }
         PersistentDataContainer data = item.getItemMeta().getPersistentDataContainer();
         return data.has(metadataPanelKey, PersistentDataType.BYTE) || data.has(cardItemKey, PersistentDataType.BYTE);
+    }
+
+    public boolean isHidden(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return false;
+        }
+        return item.getItemMeta().getPersistentDataContainer().has(hiddenPanelKey, PersistentDataType.BYTE);
+    }
+
+    public void setOwner(ItemStack item, UUID ownerId) {
+        if (item == null || !item.hasItemMeta() || ownerId == null) {
+            return;
+        }
+        MapMeta meta = (MapMeta) item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+        meta.getPersistentDataContainer().set(ownerKey, PersistentDataType.STRING, ownerId.toString());
+        item.setItemMeta(meta);
+    }
+
+    public UUID getOwner(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) {
+            return null;
+        }
+        String raw = item.getItemMeta().getPersistentDataContainer().get(ownerKey, PersistentDataType.STRING);
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     public boolean toggleHidden(ItemStack item) {

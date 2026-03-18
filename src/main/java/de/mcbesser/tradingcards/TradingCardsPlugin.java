@@ -12,6 +12,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
 
     private MotifRegistry motifRegistry;
     private CardService cardService;
+    private QuartettService quartettService;
 
     @Override
     public void onEnable() {
@@ -20,10 +21,12 @@ public final class TradingCardsPlugin extends JavaPlugin {
 
         this.motifRegistry = new MotifRegistry(this, new File(getDataFolder(), getConfig().getString("motif-folder", "motifs")));
         this.cardService = new CardService(this);
+        this.quartettService = new QuartettService(this);
 
         reloadMotifs();
         registerCommands();
         getServer().getPluginManager().registerEvents(new TradingCardListener(this), this);
+        getServer().getPluginManager().registerEvents(new QuartettListener(this, quartettService), this);
         getServer().getScheduler().runTask(this, () -> cardService.rebindLoadedMaps());
     }
 
@@ -42,6 +45,10 @@ public final class TradingCardsPlugin extends JavaPlugin {
 
     public CardService getCardService() {
         return cardService;
+    }
+
+    public QuartettService getQuartettService() {
+        return quartettService;
     }
 
     private void createDataFolders() {
