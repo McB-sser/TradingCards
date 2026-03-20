@@ -12,6 +12,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.block.DoubleChest;
@@ -21,6 +22,8 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
+import org.bukkit.Chunk;
+import org.bukkit.World;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -31,20 +34,29 @@ import org.bukkit.persistence.PersistentDataType;
 
 public final class QuartettService {
 
+    private static final int LEFT_SELECTOR_SLOT = 0;
+    private static final int LEFT_HINT_SLOT = 1;
+    private static final int LEFT_STATE_SLOT = 2;
+    private static final int INFO_SLOT = 4;
+    private static final int RESET_SLOT = 13;
+    private static final int RIGHT_STATE_SLOT = 6;
+    private static final int RIGHT_HINT_SLOT = 7;
+    private static final int RIGHT_SELECTOR_SLOT = 8;
+    private static final int STATUS_SLOT = 45;
+    private static final int MODE_SLOT = 22;
+    private static final int TURN_SLOT = 49;
+    private static final int COLLECT_SLOT = 40;
+    private static final int RETURN_SLOT = 49;
+    private static final int LEFT_PREV_SLOT = 45;
+    private static final int LEFT_PAGE_SLOT = 46;
+    private static final int LEFT_NEXT_SLOT = 47;
+    private static final int RIGHT_PREV_SLOT = 51;
+    private static final int RIGHT_PAGE_SLOT = 52;
+    private static final int RIGHT_NEXT_SLOT = 53;
     private static final int[] LEFT_OWN_SLOTS = {9, 10, 11, 18, 19, 20};
     private static final int[] RIGHT_OWN_SLOTS = {15, 16, 17, 24, 25, 26};
-    private static final int[] LEFT_NEW_SLOTS = {36, 37, 38, 45, 46, 47};
-    private static final int[] RIGHT_NEW_SLOTS = {42, 43, 44, 51, 52, 53};
-    private static final int LEFT_PREV_SLOT = 27;
-    private static final int LEFT_PAGE_SLOT = 28;
-    private static final int LEFT_NEXT_SLOT = 29;
-    private static final int MODE_SLOT = 30;
-    private static final int TURN_SLOT = 32;
-    private static final int RIGHT_PREV_SLOT = 33;
-    private static final int RIGHT_PAGE_SLOT = 34;
-    private static final int RIGHT_NEXT_SLOT = 35;
-    private static final int COLLECT_SLOT = 21;
-    private static final int RETURN_SLOT = 23;
+    private static final int[] LEFT_NEW_SLOTS = {27, 28, 29, 36, 37, 38};
+    private static final int[] RIGHT_NEW_SLOTS = {33, 34, 35, 42, 43, 44};
 
     private final TradingCardsPlugin plugin;
     private final NamespacedKey quartettSessionKey;
@@ -61,13 +73,10 @@ public final class QuartettService {
 
     public Session ensureSession(Block block) {
         Chest chest = resolveQuartettChest(block);
-        if (chest == null) {
+        if (chest == null || !(chest.getInventory().getHolder() instanceof DoubleChest doubleChest)) {
             return null;
         }
 
-        if (!(chest.getInventory().getHolder() instanceof DoubleChest doubleChest)) {
-            return null;
-        }
         Chest leftChest = (Chest) doubleChest.getLeftSide();
         Chest rightChest = (Chest) doubleChest.getRightSide();
         String sessionId = sessionId(leftChest.getBlock(), rightChest.getBlock());
@@ -75,15 +84,13 @@ public final class QuartettService {
         if (session == null) {
             session = new Session(sessionId, leftChest.getBlock(), rightChest.getBlock(), facingOf(leftChest.getBlock()));
             sessions.put(sessionId, session);
-            spawnHolograms(session);
+            spawnDisplay(session);
         }
-
         if (!session.isValid()) {
             session.clearWorldState();
-            spawnHolograms(session);
+            spawnDisplay(session);
         }
-
-        refresh(session);
+        render(session);
         return session;
     }
 
@@ -91,127 +98,125 @@ public final class QuartettService {
         if (inventory == null || !(inventory.getHolder() instanceof DoubleChest doubleChest)) {
             return null;
         }
-        Chest leftChest = (Chest) doubleChest.getLeftSide();
-        return ensureSession(leftChest.getBlock());
+        return ensureSession(((Chest) doubleChest.getLeftSide()).getBlock());
+    }
+
+    public void ensureSessionsInChunk(Chunk chunk) {
+        if (chunk == null) {
+            return;
+        }
+        clearQuartettEntitiesInChunk(chunk);
+        for (BlockState state : chunk.getTileEntities()) {
+            if (state instanceof Chest chest) {
+                ensureSession(chest.getBlock());
+            }
+        }
+    }
+
+    public void ensureSessionsInLoadedChunks() {
+        for (World world : Bukkit.getWorlds()) {
+            for (Chunk chunk : world.getLoadedChunks()) {
+                ensureSessionsInChunk(chunk);
+            }
+        }
+    }
+
+    public void clearQuartettEntitiesInChunk(Chunk chunk) {
+        if (chunk == null) {
+            return;
+        }
+        for (Entity entity : chunk.getEntities()) {
+            if (isQuartettEntity(entity)) {
+                entity.remove();
+            }
+        }
     }
 
     public boolean isQuartettChest(Block block) {
         return resolveQuartettChest(block) != null;
     }
 
-    public void cleanupSession(Block block, boolean dropCards) {
-        Session session = sessionForBlock(block);
-        if (session == null) {
-            return;
-        }
-        if (dropCards) {
-            dropStoredCards(session, block.getLocation().add(0.5, 0.5, 0.5));
-        }
-        Inventory inventory = session.inventory();
-        if (inventory != null) {
-            inventory.clear();
-        }
-        session.clearWorldState();
-        sessions.remove(session.id);
-    }
-
-    public void shutdown() {
-        List<Session> existing = new ArrayList<>(sessions.values());
-        for (Session session : existing) {
-            Inventory inventory = session.inventory();
-            if (inventory != null) {
-                inventory.clear();
-            }
-            session.clearWorldState();
-        }
-        sessions.clear();
-    }
-
-    public boolean isQuartettHologram(Entity entity) {
+    public boolean isQuartettEntity(Entity entity) {
         return entity != null && entity.getPersistentDataContainer().has(quartettSessionKey, PersistentDataType.STRING);
     }
 
-    public boolean handleHologramInteract(Player player, Entity entity) {
+    public void handleHeadInteract(Player player, Entity entity) {
         PersistentDataContainer data = entity.getPersistentDataContainer();
         String sessionId = data.get(quartettSessionKey, PersistentDataType.STRING);
         String type = data.get(quartettTypeKey, PersistentDataType.STRING);
-        String side = data.get(quartettSideKey, PersistentDataType.STRING);
+        String rawSide = data.get(quartettSideKey, PersistentDataType.STRING);
         if (sessionId == null || type == null) {
-            return false;
+            return;
         }
 
         Session session = sessions.get(sessionId);
         if (session == null || !session.isValid()) {
-            return false;
-        }
-
-        if ("center".equals(type)) {
-            return chooseMode(player, session);
-        }
-        if ("slot".equals(type) && side != null) {
-            return join(player, session, Side.valueOf(side));
-        }
-        return false;
-    }
-
-    public boolean handleChestInteract(Player player, Block clickedBlock, ItemStack heldItem) {
-        Session session = ensureSession(clickedBlock);
-        if (session == null || !plugin.getCardService().isTradingCardItem(heldItem)) {
-            return false;
-        }
-
-        Side side = session.sideOf(player.getUniqueId());
-        if (side == null) {
-            player.sendMessage("Du spielst an dieser Quartett-Kiste nicht mit.");
-            return true;
-        }
-        if (session.cardFrames.containsKey(side)) {
-            player.sendMessage("Du hast bereits eine Karte in diesem Quartett gelegt.");
-            return true;
-        }
-
-        Block cardBlock = session.cardBlock(side);
-        if (cardBlock.getType() != Material.AIR && cardBlock.getType() != Material.BARRIER) {
-            player.sendMessage("Vor deiner Seite ist kein Platz fuer die Datenkarte.");
-            return true;
-        }
-
-        String motifId = plugin.getCardService().getMotifId(heldItem);
-        LoadedMotif motif = motifId == null ? null : plugin.getMotifRegistry().find(motifId);
-        if (motif == null) {
-            player.sendMessage("Diese Karte hat kein gueltiges Motiv.");
-            return true;
-        }
-
-        CardStats stats = plugin.getCardService().getStats(heldItem);
-        ItemStack displayCard = plugin.getCardService().createPlacedDisplayItems(motif, UUID.randomUUID().toString(), 1, true, stats).get(0);
-        plugin.getCardService().setOwner(displayCard, player.getUniqueId());
-
-        ItemStack storedCard = plugin.getCardService().createCardItem(motif, stats);
-        plugin.getCardService().setOwner(storedCard, player.getUniqueId());
-
-        cardBlock.setType(Material.BARRIER, false);
-        ItemFrame frame = cardBlock.getWorld().spawn(cardBlock.getLocation(), ItemFrame.class, spawned -> {
-            spawned.setFacingDirection(session.facing, true);
-            spawned.setVisible(false);
-            spawned.setItem(displayCard, false);
-        });
-
-        session.cardFrames.put(side, frame);
-        session.roundCards.put(side, storedCard);
-        session.ownCards.get(side).add(storedCard.clone());
-        consumeOne(player, heldItem);
-        refresh(session);
-        player.sendMessage("Deine Quartett-Karte wurde verdeckt platziert.");
-        return true;
-    }
-
-    public void refresh(Session session) {
-        if (session == null) {
             return;
         }
-        updateHolograms(session);
-        renderInventory(session);
+
+        if ("mode".equals(type)) {
+            ItemStack held = player.getInventory().getItemInMainHand();
+            if (plugin.getCardService().isTradingCardItem(held)) {
+                Side side = session.sideOf(player.getUniqueId());
+                if (side == null) {
+                    side = assignFreeSide(session, player);
+                    if (side == null) {
+                        player.sendMessage("Es ist keine freie Quartett-Seite mehr verf\u00fcgbar.");
+                        return;
+                    }
+                }
+                if (session.roundFrames.containsKey(side)) {
+                    player.sendMessage("Auf deiner Seite liegt bereits eine Karte.");
+                    return;
+                }
+                placeRoundCard(session, side, player, held);
+                return;
+            }
+            if (session.sideOf(player.getUniqueId()) == null) {
+                Side side = assignFreeSide(session, player);
+                if (side != null) {
+                    player.sendMessage("Du spielst jetzt auf der " + side.label + " Seite.");
+                    return;
+                }
+            }
+            if (session.currentTurn != null) {
+                UUID currentPlayer = session.players.get(session.currentTurn);
+                if (currentPlayer != null && !currentPlayer.equals(player.getUniqueId())) {
+                    player.sendMessage("Gerade ist der andere Spieler mit der Attributwahl dran.");
+                    return;
+                }
+            }
+            if (session.roundResolved) {
+                finalizeRound(session);
+                player.sendMessage("Die Runde wurde abger\u00e4umt.");
+                return;
+            }
+            cycleMode(session);
+            player.sendMessage("Quartett-Attribut: " + modeLabel(session));
+            return;
+        }
+        if (!"head".equals(type) || rawSide == null) {
+            return;
+        }
+
+        Side side = Side.valueOf(rawSide);
+        UUID assigned = session.players.get(side);
+        if (assigned == null || !assigned.equals(player.getUniqueId())) {
+            player.sendMessage("Das ist nicht deine Quartett-Seite.");
+            return;
+        }
+
+        ItemStack held = player.getInventory().getItemInMainHand();
+        if (!plugin.getCardService().isTradingCardItem(held)) {
+            player.sendMessage("Halte eine TradingCard in der Hand, um sie zu hinterlegen.");
+            return;
+        }
+        if (session.roundFrames.containsKey(side)) {
+            player.sendMessage("Auf deiner Seite liegt bereits eine Karte.");
+            return;
+        }
+
+        placeRoundCard(session, side, player, held);
     }
 
     public void handleInventoryClick(Player player, Inventory inventory, int rawSlot) {
@@ -220,6 +225,51 @@ public final class QuartettService {
             return;
         }
 
+        if (rawSlot == LEFT_SELECTOR_SLOT) {
+            selectSide(session, Side.LEFT, player);
+            return;
+        }
+        if (rawSlot == RIGHT_SELECTOR_SLOT) {
+            selectSide(session, Side.RIGHT, player);
+            return;
+        }
+        if (rawSlot == MODE_SLOT) {
+            if (session.currentTurn != null) {
+                UUID currentPlayer = session.players.get(session.currentTurn);
+                if (currentPlayer != null && !currentPlayer.equals(player.getUniqueId())) {
+                    player.sendMessage("Gerade ist der andere Spieler mit der Attributwahl dran.");
+                    return;
+                }
+            }
+            if (session.roundResolved) {
+                finalizeRound(session);
+                player.sendMessage("Die Runde wurde abger\u00e4umt.");
+                return;
+            }
+            cycleMode(session);
+            player.sendMessage("Quartett-Attribut: " + modeLabel(session));
+            return;
+        }
+        if (rawSlot == RESET_SLOT) {
+            resetSession(session, true);
+            render(session);
+            player.sendMessage("Quartett wurde zur\u00fcckgesetzt. Spieler wurden abgew\u00e4hlt und Karten zur\u00fcckgegeben.");
+            return;
+        }
+        if (rawSlot == COLLECT_SLOT) {
+            session.transferMode = TransferMode.COLLECT;
+            payoutStoredCards(session);
+            render(session);
+            player.sendMessage("Alle Karten wurden verteilt. Gewonnene Karten bleiben beim Gewinner.");
+            return;
+        }
+        if (rawSlot == RETURN_SLOT) {
+            session.transferMode = TransferMode.RETURN;
+            payoutStoredCards(session);
+            render(session);
+            player.sendMessage("Alle Karten wurden an ihre Besitzer zur\u00fcckgegeben.");
+            return;
+        }
         if (rawSlot == LEFT_PREV_SLOT) {
             changePage(session, Side.LEFT, -1);
             return;
@@ -236,27 +286,14 @@ public final class QuartettService {
             changePage(session, Side.RIGHT, 1);
             return;
         }
-        if (rawSlot == COLLECT_SLOT) {
-            session.transferMode = TransferMode.COLLECT;
-            refresh(session);
-            player.sendMessage("Quartett ist auf Einsammeln gestellt.");
-            return;
-        }
-        if (rawSlot == RETURN_SLOT) {
-            session.transferMode = TransferMode.RETURN;
-            refresh(session);
-            player.sendMessage("Quartett ist auf Gegnerkarten wiedergeben gestellt.");
-            return;
-        }
 
-        ClickTarget target = clickTarget(rawSlot);
+        ClickTarget target = resolveClickTarget(rawSlot);
         if (target == null) {
             return;
         }
-
-        int page = session.pages.get(target.side);
         List<ItemStack> source = target.newCards ? session.newCards.get(target.side) : session.ownCards.get(target.side);
-        int index = (page * target.slots.length) + target.index;
+        int page = session.pages.get(target.side);
+        int index = page * target.slots.length + target.index;
         if (index < 0 || index >= source.size()) {
             return;
         }
@@ -269,170 +306,340 @@ public final class QuartettService {
 
         source.remove(index);
         player.getInventory().addItem(item.clone()).values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
-        resetParticipants(session);
-        refresh(session);
+        normalizePages(session);
+        render(session);
     }
 
-    private boolean mayTake(Player player, Session session, Side displaySide, ItemStack item) {
-        if (session.transferMode == TransferMode.NONE) {
+    public boolean depositFromInventory(Player player, Inventory inventory, ItemStack item) {
+        Session session = ensureSession(inventory);
+        if (session == null || !plugin.getCardService().isTradingCardItem(item)) {
             return false;
         }
-        if (session.transferMode == TransferMode.COLLECT) {
-            return session.sideOf(player.getUniqueId()) == displaySide;
+        Side side = session.sideOf(player.getUniqueId());
+        if (side == null) {
+            player.sendMessage("W\u00e4hle zuerst eine Seite in der Quartett-Kiste.");
+            return true;
         }
-        UUID owner = plugin.getCardService().getOwner(item);
-        return owner != null && owner.equals(player.getUniqueId());
+        if (session.roundFrames.containsKey(side)) {
+            player.sendMessage("Auf deiner Seite liegt bereits eine Karte.");
+            return true;
+        }
+        placeRoundCard(session, side, player, item);
+        return true;
     }
 
-    private ClickTarget clickTarget(int rawSlot) {
-        ClickTarget target = matchSlots(rawSlot, Side.LEFT, false, LEFT_OWN_SLOTS);
-        if (target != null) {
-            return target;
+    public boolean isQuartettRoundFrame(ItemFrame frame) {
+        if (frame == null) {
+            return false;
         }
-        target = matchSlots(rawSlot, Side.RIGHT, false, RIGHT_OWN_SLOTS);
-        if (target != null) {
-            return target;
-        }
-        target = matchSlots(rawSlot, Side.LEFT, true, LEFT_NEW_SLOTS);
-        if (target != null) {
-            return target;
-        }
-        return matchSlots(rawSlot, Side.RIGHT, true, RIGHT_NEW_SLOTS);
-    }
-
-    private ClickTarget matchSlots(int rawSlot, Side side, boolean newCards, int[] slots) {
-        for (int i = 0; i < slots.length; i++) {
-            if (slots[i] == rawSlot) {
-                return new ClickTarget(side, newCards, slots, i);
+        for (Session session : sessions.values()) {
+            if (session.roundFrames.containsValue(frame)) {
+                return true;
             }
         }
-        return null;
+        return false;
     }
 
-    private void changePage(Session session, Side side, int delta) {
-        int page = session.pages.get(side) + delta;
-        int maxPage = Math.max(maxPage(session.ownCards.get(side), side == Side.LEFT ? LEFT_OWN_SLOTS.length : RIGHT_OWN_SLOTS.length),
-            maxPage(session.newCards.get(side), side == Side.LEFT ? LEFT_NEW_SLOTS.length : RIGHT_NEW_SLOTS.length));
-        session.pages.put(side, Math.max(0, Math.min(maxPage, page)));
-        refresh(session);
-    }
-
-    private int maxPage(List<ItemStack> items, int pageSize) {
-        return Math.max(0, (items.size() - 1) / pageSize);
-    }
-
-    private boolean join(Player player, Session session, Side side) {
-        UUID current = session.players.get(side);
-        if (current != null && !current.equals(player.getUniqueId())) {
-            player.sendMessage("Diese Seite ist bereits belegt.");
+    public boolean canRevealQuartettFrame(Player player, ItemFrame frame) {
+        if (frame == null) {
             return true;
         }
-        if (session.sideOf(player.getUniqueId()) != null) {
-            player.sendMessage("Du spielst bereits an dieser Quartett-Kiste mit.");
-            return true;
+        for (Session session : sessions.values()) {
+            for (Map.Entry<Side, ItemFrame> entry : session.roundFrames.entrySet()) {
+                if (!frame.equals(entry.getValue())) {
+                    continue;
+                }
+                Side side = entry.getKey();
+                UUID owner = session.players.get(side);
+                if (owner != null && !owner.equals(player.getUniqueId())) {
+                    player.sendMessage("Nur der Besitzer kann diese Karte aufdecken.");
+                    return false;
+                }
+                if (session.mode == null) {
+                    player.sendMessage("W\u00e4hle zuerst in der Mitte ein Attribut.");
+                    return false;
+                }
+                ItemFrame leftFrame = session.roundFrames.get(Side.LEFT);
+                ItemFrame rightFrame = session.roundFrames.get(Side.RIGHT);
+                boolean leftHidden = leftFrame != null && plugin.getCardService().isHidden(leftFrame.getItem());
+                boolean rightHidden = rightFrame != null && plugin.getCardService().isHidden(rightFrame.getItem());
+                if (leftHidden && rightHidden && session.currentTurn != null && session.currentTurn != side) {
+                    player.sendMessage("Der Spieler mit dem Pfeil muss zuerst aufdecken.");
+                    return false;
+                }
+                return true;
+            }
         }
-        session.players.put(side, player.getUniqueId());
-        if (session.chooser == null) {
-            session.chooser = side;
-        }
-        refresh(session);
-        player.sendMessage("Du spielst jetzt im Quartett auf der " + side.label + " Seite mit.");
         return true;
     }
 
-    private boolean chooseMode(Player player, Session session) {
-        Side chooser = session.chooser;
-        if (chooser == null || !player.getUniqueId().equals(session.players.get(chooser))) {
-            player.sendMessage("Du bist nicht mit der Attributswahl dran.");
-            return true;
+    public void refreshRoundState(ItemFrame frame) {
+        if (frame == null) {
+            return;
         }
-        ItemFrame leftFrame = session.cardFrames.get(Side.LEFT);
-        ItemFrame rightFrame = session.cardFrames.get(Side.RIGHT);
-        if (leftFrame == null || rightFrame == null) {
-            player.sendMessage("Beide Spieler muessen zuerst eine Karte legen.");
-            return true;
-        }
-        if (plugin.getCardService().isHidden(leftFrame.getItem()) || plugin.getCardService().isHidden(rightFrame.getItem())) {
-            player.sendMessage("Beide Karten muessen zuerst aufgedeckt sein.");
-            return true;
-        }
-
-        session.mode = session.mode.next();
-        session.winner = compare(session.mode, leftFrame.getItem(), rightFrame.getItem());
-        settleRound(session);
-        session.chooser = session.winner != null ? session.winner : session.chooser.other();
-        refresh(session);
-        player.sendMessage("Vergleichsmodus: " + session.mode.label);
-        return true;
-    }
-
-    private Side compare(CompareMode mode, ItemStack leftItem, ItemStack rightItem) {
-        int leftValue = modeValue(mode, leftItem);
-        int rightValue = modeValue(mode, rightItem);
-        if (leftValue == rightValue) {
-            return null;
-        }
-        return leftValue > rightValue ? Side.LEFT : Side.RIGHT;
-    }
-
-    private void settleRound(Session session) {
-        ItemStack leftStored = session.roundCards.remove(Side.LEFT);
-        ItemStack rightStored = session.roundCards.remove(Side.RIGHT);
-
-        if (session.winner == Side.LEFT && leftStored != null && rightStored != null) {
-            removeLatestOwned(session.ownCards.get(Side.RIGHT), plugin.getCardService().getOwner(rightStored));
-            session.newCards.get(Side.LEFT).add(rightStored.clone());
-        } else if (session.winner == Side.RIGHT && leftStored != null && rightStored != null) {
-            removeLatestOwned(session.ownCards.get(Side.LEFT), plugin.getCardService().getOwner(leftStored));
-            session.newCards.get(Side.RIGHT).add(leftStored.clone());
-        }
-
-        clearFrame(session, Side.LEFT);
-        clearFrame(session, Side.RIGHT);
-    }
-
-    private void removeLatestOwned(List<ItemStack> items, UUID owner) {
-        for (int i = items.size() - 1; i >= 0; i--) {
-            UUID itemOwner = plugin.getCardService().getOwner(items.get(i));
-            if (owner != null && owner.equals(itemOwner)) {
-                items.remove(i);
+        for (Session session : sessions.values()) {
+            if (session.roundFrames.containsValue(frame)) {
+                updateWinner(session);
+                render(session);
                 return;
             }
         }
     }
 
-    private void clearFrame(Session session, Side side) {
-        ItemFrame frame = session.cardFrames.remove(side);
-        if (frame == null) {
+    public void cleanupSession(Block block, boolean dropCards) {
+        Session session = sessionForBlock(block);
+        if (session == null) {
             return;
         }
+        if (dropCards) {
+            Location location = block.getLocation().add(0.5, 0.5, 0.5);
+            for (ItemStack item : session.allStoredCards()) {
+                location.getWorld().dropItemNaturally(location, item);
+            }
+        }
+        Inventory inventory = session.inventory();
+        if (inventory != null) {
+            inventory.clear();
+        }
+        session.clearWorldState();
+        sessions.remove(session.id);
+    }
+
+    public void shutdown() {
+        List<Session> copy = new ArrayList<>(sessions.values());
+        for (Session session : copy) {
+            Inventory inventory = session.inventory();
+            if (inventory != null) {
+                inventory.clear();
+            }
+            session.clearWorldState();
+        }
+        sessions.clear();
+    }
+
+    private void placeRoundCard(Session session, Side side, Player player, ItemStack held) {
+        String motifId = plugin.getCardService().getMotifId(held);
+        LoadedMotif motif = motifId == null ? null : plugin.getMotifRegistry().find(motifId);
+        if (motif == null) {
+            player.sendMessage("Diese Karte hat kein g\u00fcltiges Motiv.");
+            return;
+        }
+
+        CardStats stats = plugin.getCardService().getStats(held);
+        String displayId = UUID.randomUUID().toString();
+        ItemStack displayCard = plugin.getCardService().createPlacedDisplayItems(motif, displayId, 1, true, stats).get(0);
+        plugin.getCardService().setOwner(displayCard, player.getUniqueId());
+
+        ItemStack storedCard = plugin.getCardService().createCardItem(motif, stats);
+        plugin.getCardService().setOwner(storedCard, player.getUniqueId());
+
         Block cardBlock = session.cardBlock(side);
-        if (cardBlock.getType() == Material.BARRIER) {
-            cardBlock.setType(Material.AIR, false);
+        if (cardBlock.getType() != Material.AIR) {
+            player.sendMessage("Vor deiner Seite ist kein Platz f\u00fcr die Karte.");
+            return;
+        }
+
+        ItemFrame frame = cardBlock.getWorld().spawn(cardBlock.getLocation(), ItemFrame.class, spawned -> {
+            spawned.setFacingDirection(session.facing, true);
+            spawned.setVisible(false);
+            spawned.setItem(displayCard, false);
+            PersistentDataContainer data = spawned.getPersistentDataContainer();
+            data.set(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING, displayId);
+            data.set(plugin.getCardService().getPanelIndexKey(), PersistentDataType.INTEGER, 0);
+            data.set(plugin.getCardService().getMotifIdKey(), PersistentDataType.STRING, motif.id());
+        });
+
+        session.roundFrames.put(side, frame);
+        session.roundCards.put(side, storedCard.clone());
+        session.ownCards.get(side).add(storedCard.clone());
+        consumeOne(player, held);
+        updateWinner(session);
+        render(session);
+        player.sendMessage("Deine Karte wurde vor der Kiste hinterlegt.");
+    }
+
+    private void selectSide(Session session, Side side, Player player) {
+        UUID current = session.players.get(side);
+        if (current != null && !current.equals(player.getUniqueId())) {
+            player.sendMessage("Diese Seite ist bereits belegt.");
+            return;
+        }
+        Side already = session.sideOf(player.getUniqueId());
+        if (already != null && already != side) {
+            player.sendMessage("Du hast bereits die andere Seite gew\u00e4hlt.");
+            return;
+        }
+        session.players.put(side, player.getUniqueId());
+        if (session.currentTurn == null && session.players.get(Side.LEFT) != null && session.players.get(Side.RIGHT) != null) {
+            session.currentTurn = Side.LEFT;
+        }
+        render(session);
+        player.sendMessage("Du spielst jetzt auf der " + side.label + " Seite.");
+    }
+
+    private Side assignFreeSide(Session session, Player player) {
+        if (session.sideOf(player.getUniqueId()) != null) {
+            return session.sideOf(player.getUniqueId());
+        }
+        if (session.players.get(Side.LEFT) == null) {
+            selectSide(session, Side.LEFT, player);
+            return Side.LEFT;
+        }
+        if (session.players.get(Side.RIGHT) == null) {
+            selectSide(session, Side.RIGHT, player);
+            return Side.RIGHT;
+        }
+        return null;
+    }
+
+    private void cycleMode(Session session) {
+        session.mode = session.mode == null ? CompareMode.LEBEN : session.mode.next();
+        updateWinner(session);
+        render(session);
+    }
+
+    private void updateWinner(Session session) {
+        ItemFrame left = session.roundFrames.get(Side.LEFT);
+        ItemFrame right = session.roundFrames.get(Side.RIGHT);
+        if (left == null || right == null) {
+            session.winner = null;
+            session.roundResolved = false;
+            return;
+        }
+        if (plugin.getCardService().isHidden(left.getItem()) || plugin.getCardService().isHidden(right.getItem())) {
+            session.winner = null;
+            session.roundResolved = false;
+            return;
+        }
+        if (session.mode == null) {
+            session.winner = null;
+            session.roundResolved = false;
+            return;
+        }
+
+        int leftValue = attributeValue(session.mode, left.getItem());
+        int rightValue = attributeValue(session.mode, right.getItem());
+        session.roundResolved = true;
+        if (leftValue == rightValue) {
+            session.winner = null;
+            return;
+        }
+        session.winner = leftValue > rightValue ? Side.LEFT : Side.RIGHT;
+    }
+
+    private void finalizeRound(Session session) {
+        Side roundWinner = session.winner;
+        ItemStack left = session.roundCards.remove(Side.LEFT);
+        ItemStack right = session.roundCards.remove(Side.RIGHT);
+        clearRoundFrame(session, Side.LEFT);
+        clearRoundFrame(session, Side.RIGHT);
+        if (left == null || right == null) {
+            session.mode = null;
+            session.winner = null;
+            session.roundResolved = false;
+            render(session);
+            return;
+        }
+
+        if (roundWinner == Side.LEFT) {
+            removeLastOwned(session.ownCards.get(Side.RIGHT), plugin.getCardService().getOwner(right));
+            session.newCards.get(Side.LEFT).add(right.clone());
+            session.currentTurn = roundWinner;
+        } else if (roundWinner == Side.RIGHT) {
+            removeLastOwned(session.ownCards.get(Side.LEFT), plugin.getCardService().getOwner(left));
+            session.newCards.get(Side.RIGHT).add(left.clone());
+            session.currentTurn = roundWinner;
+        }
+        session.mode = null;
+        session.winner = null;
+        session.roundResolved = false;
+        render(session);
+    }
+
+    private void clearRoundFrame(Session session, Side side) {
+        ItemFrame frame = session.roundFrames.remove(side);
+        if (frame == null) {
+            return;
         }
         frame.setItem(null, false);
         frame.remove();
     }
 
-    private void dropStoredCards(Session session, Location location) {
-        for (ItemStack item : session.dropItems()) {
-            location.getWorld().dropItemNaturally(location, item);
-        }
-    }
-
-    private Session sessionForBlock(Block block) {
-        if (block == null) {
-            return null;
-        }
-        for (Session session : sessions.values()) {
-            if (session.usesBlock(block)) {
-                return session;
+    private void payoutStoredCards(Session session) {
+        Location payoutLocation = session.modeLocation();
+        for (Side side : Side.values()) {
+            UUID playerId = session.players.get(side);
+            for (ItemStack item : drainCards(session.ownCards.get(side))) {
+                giveCardToPlayer(item, playerId, payoutLocation);
             }
         }
-        return null;
+        for (Side side : Side.values()) {
+            Side recipientSide = session.transferMode == TransferMode.COLLECT ? side : opposite(side);
+            UUID playerId = session.players.get(recipientSide);
+            for (ItemStack item : drainCards(session.newCards.get(side))) {
+                giveCardToPlayer(item, playerId, payoutLocation);
+            }
+        }
+        for (ItemStack item : new ArrayList<>(session.roundCards.values())) {
+            giveCardToOwner(item, payoutLocation);
+        }
+
+        clearRoundFrame(session, Side.LEFT);
+        clearRoundFrame(session, Side.RIGHT);
+        session.roundCards.clear();
+        session.mode = null;
+        session.winner = null;
+        session.roundResolved = false;
+        session.transferMode = TransferMode.NONE;
+        session.currentTurn = session.players.get(Side.LEFT) != null && session.players.get(Side.RIGHT) != null ? Side.LEFT : null;
+        normalizePages(session);
     }
 
-    private int modeValue(CompareMode mode, ItemStack item) {
+    private List<ItemStack> drainCards(List<ItemStack> cards) {
+        List<ItemStack> items = new ArrayList<>();
+        cards.forEach(card -> items.add(card.clone()));
+        cards.clear();
+        return items;
+    }
+
+    private void giveCardToPlayer(ItemStack item, UUID playerId, Location fallbackLocation) {
+        Player player = playerId == null ? null : Bukkit.getPlayer(playerId);
+        if (player != null) {
+            player.getInventory().addItem(item.clone()).values()
+                .forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+            return;
+        }
+        giveCardToOwner(item, fallbackLocation);
+    }
+
+    private void giveCardToOwner(ItemStack item, Location fallbackLocation) {
+        UUID ownerId = plugin.getCardService().getOwner(item);
+        Player owner = ownerId == null ? null : Bukkit.getPlayer(ownerId);
+        if (owner != null) {
+            owner.getInventory().addItem(item.clone()).values()
+                .forEach(leftover -> owner.getWorld().dropItemNaturally(owner.getLocation(), leftover));
+            return;
+        }
+        if (fallbackLocation.getWorld() != null) {
+            fallbackLocation.getWorld().dropItemNaturally(fallbackLocation, item.clone());
+        }
+    }
+
+    private Side opposite(Side side) {
+        return side == Side.LEFT ? Side.RIGHT : Side.LEFT;
+    }
+
+    private void removeLastOwned(List<ItemStack> cards, UUID ownerId) {
+        for (int i = cards.size() - 1; i >= 0; i--) {
+            UUID owner = plugin.getCardService().getOwner(cards.get(i));
+            if (ownerId != null && ownerId.equals(owner)) {
+                cards.remove(i);
+                return;
+            }
+        }
+    }
+
+    private int attributeValue(CompareMode mode, ItemStack item) {
         CardStats stats = plugin.getCardService().getStats(item);
         return switch (mode) {
             case LEBEN -> stats.health();
@@ -458,89 +665,95 @@ public final class QuartettService {
         return (int) Math.round(total * multiplier * 10);
     }
 
-    private void spawnHolograms(Session session) {
-        session.centerStand = spawnStand(session.centerLocation(), "center", null);
-        session.centerStand.setRotation(yawForFacing(session.facing), 0.0F);
-        session.centerInteraction = spawnInteraction(session.centerLocation().clone().add(0.0, -0.25, 0.0), "center", null, 1.2F, 0.9F);
-        ArmorStand leftStand = spawnStand(session.sideLocation(Side.LEFT), "slot", Side.LEFT);
-        leftStand.setRotation(yawForFacing(session.facing), 0.0F);
-        session.slotStands.put(Side.LEFT, leftStand);
-        ArmorStand rightStand = spawnStand(session.sideLocation(Side.RIGHT), "slot", Side.RIGHT);
-        rightStand.setRotation(yawForFacing(session.facing), 0.0F);
-        session.slotStands.put(Side.RIGHT, rightStand);
-        session.slotInteractions.put(Side.LEFT, spawnInteraction(session.sideLocation(Side.LEFT).clone().add(0.0, -0.2, 0.0), "slot", Side.LEFT, 1.0F, 0.9F));
-        session.slotInteractions.put(Side.RIGHT, spawnInteraction(session.sideLocation(Side.RIGHT).clone().add(0.0, -0.2, 0.0), "slot", Side.RIGHT, 1.0F, 0.9F));
+    private void render(Session session) {
+        renderInventory(session);
+        renderDisplay(session);
     }
 
-    private ArmorStand spawnStand(Location location, String type, Side side) {
+    private void spawnDisplay(Session session) {
+        session.modeStand = spawnTextStand(session.id, session.modeLocation(), "mode", null);
+        session.modeInteraction = spawnInteraction(session.id, session.modeLocation().clone().add(0.0, -0.15, 0.0), "mode", null);
+
+        ArmorStand leftHead = spawnHeadStand(session.id, session.headLocation(Side.LEFT), Side.LEFT);
+        leftHead.setRotation(yawForFacing(session.facing), 0.0F);
+        session.headStands.put(Side.LEFT, leftHead);
+        ArmorStand rightHead = spawnHeadStand(session.id, session.headLocation(Side.RIGHT), Side.RIGHT);
+        rightHead.setRotation(yawForFacing(session.facing), 0.0F);
+        session.headStands.put(Side.RIGHT, rightHead);
+
+        session.headInteractions.put(Side.LEFT, spawnInteraction(session.id, session.headClickLocation(Side.LEFT), "head", Side.LEFT));
+        session.headInteractions.put(Side.RIGHT, spawnInteraction(session.id, session.headClickLocation(Side.RIGHT), "head", Side.RIGHT));
+    }
+
+    private void renderDisplay(Session session) {
+        session.modeStand.setCustomName(session.roundResolved ? "Klick mich" : modeLabel(session));
+        session.modeStand.setCustomNameVisible(true);
+        for (Side side : Side.values()) {
+            ArmorStand stand = session.headStands.get(side);
+            if (stand == null) {
+                continue;
+            }
+            stand.getEquipment().setHelmet(null);
+            Side markerSide = session.roundResolved ? session.winner : session.currentTurn;
+            String marker = session.roundResolved ? "\u00A76\u2191" : "\u2191";
+            stand.setCustomName(markerSide == side ? marker : null);
+            stand.setCustomNameVisible(markerSide == side);
+            UUID playerId = session.players.get(side);
+            if (playerId == null) {
+                stand.getEquipment().setHelmet(new ItemStack(side == Side.LEFT ? Material.SKELETON_SKULL : Material.WITHER_SKELETON_SKULL));
+                continue;
+            }
+
+            Player player = Bukkit.getPlayer(playerId);
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta meta = (SkullMeta) head.getItemMeta();
+            if (meta != null) {
+                if (player != null) {
+                    meta.setOwningPlayer(player);
+                }
+                if (session.winner == side) {
+                    meta.addEnchant(Enchantment.LURE, 1, true);
+                    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+                }
+                head.setItemMeta(meta);
+            }
+            stand.getEquipment().setHelmet(head);
+        }
+    }
+
+    private ArmorStand spawnTextStand(String sessionId, Location location, String type, Side side) {
         return location.getWorld().spawn(location, ArmorStand.class, stand -> {
             stand.setInvisible(true);
             stand.setInvulnerable(true);
             stand.setMarker(true);
+            stand.setSmall(true);
             stand.setGravity(false);
             stand.setBasePlate(false);
             stand.setCustomNameVisible(true);
-            PersistentDataContainer data = stand.getPersistentDataContainer();
-            data.set(quartettSessionKey, PersistentDataType.STRING, "");
-            data.set(quartettTypeKey, PersistentDataType.STRING, type);
-            if (side != null) {
-                data.set(quartettSideKey, PersistentDataType.STRING, side.name());
-            }
+            stamp(stand, sessionId, type, side);
         });
     }
 
-    private Interaction spawnInteraction(Location location, String type, Side side, float width, float height) {
+    private ArmorStand spawnHeadStand(String sessionId, Location location, Side side) {
+        return location.getWorld().spawn(location, ArmorStand.class, stand -> {
+            stand.setInvisible(true);
+            stand.setInvulnerable(true);
+            stand.setMarker(true);
+            stand.setSmall(false);
+            stand.setGravity(false);
+            stand.setBasePlate(false);
+            stand.setCustomNameVisible(false);
+            stamp(stand, sessionId, "head", side);
+        });
+    }
+
+    private Interaction spawnInteraction(String sessionId, Location location, String type, Side side) {
         return location.getWorld().spawn(location, Interaction.class, interaction -> {
             interaction.setResponsive(true);
-            interaction.setInteractionWidth(width);
-            interaction.setInteractionHeight(height);
-            PersistentDataContainer data = interaction.getPersistentDataContainer();
-            data.set(quartettSessionKey, PersistentDataType.STRING, "");
-            data.set(quartettTypeKey, PersistentDataType.STRING, type);
-            if (side != null) {
-                data.set(quartettSideKey, PersistentDataType.STRING, side.name());
-            }
+            interaction.setInteractionWidth(0.35F);
+            interaction.setInteractionHeight(0.35F);
+            stamp(interaction, sessionId, type, side);
         });
-    }
-
-    private void updateHolograms(Session session) {
-        stamp(session.centerStand, session.id, "center", null);
-        stamp(session.centerInteraction, session.id, "center", null);
-        session.centerStand.setCustomName("Quartett: " + session.mode.label);
-
-        updateSideStand(session, Side.LEFT);
-        updateSideStand(session, Side.RIGHT);
-    }
-
-    private void updateSideStand(Session session, Side side) {
-        ArmorStand stand = session.slotStands.get(side);
-        Interaction interaction = session.slotInteractions.get(side);
-        stamp(stand, session.id, "slot", side);
-        stamp(interaction, session.id, "slot", side);
-        stand.setGlowing(false);
-        stand.getEquipment().setHelmet(null);
-        stand.setCustomName("?");
-
-        UUID playerId = session.players.get(side);
-        if (playerId == null) {
-            return;
-        }
-
-        Player player = Bukkit.getPlayer(playerId);
-        stand.setCustomName(null);
-        if (session.winner == side) {
-            stand.setGlowing(true);
-        } else if (session.chooser == side) {
-            stand.setGlowing(true);
-        }
-
-        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
-        SkullMeta meta = (SkullMeta) head.getItemMeta();
-        if (meta != null && player != null) {
-            meta.setOwningPlayer(player);
-            head.setItemMeta(meta);
-        }
-        stand.getEquipment().setHelmet(head);
     }
 
     private void stamp(Entity entity, String sessionId, String type, Side side) {
@@ -561,115 +774,144 @@ public final class QuartettService {
         }
         inventory.clear();
 
-        fillSeparator(inventory);
-        renderHeader(session, Side.LEFT);
-        renderHeader(session, Side.RIGHT);
-        renderButtons(session, inventory);
-        renderCards(session, inventory, Side.LEFT, false, LEFT_OWN_SLOTS);
-        renderCards(session, inventory, Side.RIGHT, false, RIGHT_OWN_SLOTS);
-        renderCards(session, inventory, Side.LEFT, true, LEFT_NEW_SLOTS);
-        renderCards(session, inventory, Side.RIGHT, true, RIGHT_NEW_SLOTS);
+        fillSeparators(inventory);
+        inventory.setItem(INFO_SLOT, updatedInfoBook());
+        inventory.setItem(RESET_SLOT, namedItem(Material.BARRIER, "\u00A7cReset"));
+        inventory.setItem(LEFT_SELECTOR_SLOT, selectorItem(session, Side.LEFT));
+        inventory.setItem(RIGHT_SELECTOR_SLOT, selectorItem(session, Side.RIGHT));
+        inventory.setItem(MODE_SLOT, namedItem(Material.COMPASS, "\u00A7e" + (session.roundResolved ? "Klick mich: Runde abr\u00e4umen" : "Attribut: " + modeLabel(session))));
+        inventory.setItem(COLLECT_SLOT, activeButton(Material.LIME_DYE, "\u00A7aGewonnene Karten behalten", session.transferMode == TransferMode.COLLECT));
+        inventory.setItem(RETURN_SLOT, activeButton(Material.ORANGE_DYE, "\u00A76Gewonnene Karten zur\u00fcckgeben", session.transferMode == TransferMode.RETURN));
+        inventory.setItem(LEFT_PREV_SLOT, namedItem(Material.ARROW, "\u00A77<"));
+        inventory.setItem(LEFT_PAGE_SLOT, namedItem(Material.PAPER, "\u00A77Seite " + (session.pages.get(Side.LEFT) + 1)));
+        inventory.setItem(LEFT_NEXT_SLOT, namedItem(Material.ARROW, "\u00A77>"));
+        inventory.setItem(RIGHT_PREV_SLOT, namedItem(Material.ARROW, "\u00A77<"));
+        inventory.setItem(RIGHT_PAGE_SLOT, namedItem(Material.PAPER, "\u00A77Seite " + (session.pages.get(Side.RIGHT) + 1)));
+        inventory.setItem(RIGHT_NEXT_SLOT, namedItem(Material.ARROW, "\u00A77>"));
+
+        renderCardArea(session, inventory, Side.LEFT, false, LEFT_OWN_SLOTS);
+        renderCardArea(session, inventory, Side.RIGHT, false, RIGHT_OWN_SLOTS);
+        renderCardArea(session, inventory, Side.LEFT, true, LEFT_NEW_SLOTS);
+        renderCardArea(session, inventory, Side.RIGHT, true, RIGHT_NEW_SLOTS);
     }
 
-    private void fillSeparator(Inventory inventory) {
+    private void fillSeparators(Inventory inventory) {
         ItemStack pane = namedItem(Material.GRAY_STAINED_GLASS_PANE, "\u00A77Trennung");
-        for (int slot : new int[] {4, 13, 22, 31, 40, 49}) {
+        for (int slot : new int[] {1, 2, 3, 5, 6, 7, 31, 48, 50}) {
             inventory.setItem(slot, pane);
         }
     }
 
-    private void renderHeader(Session session, Side side) {
-        Inventory inventory = session.inventory();
-        if (inventory == null) {
-            return;
-        }
-
-        int[] headerSlots = side == Side.LEFT ? new int[] {0, 1, 2} : new int[] {6, 7, 8};
-        int headSlot = side == Side.LEFT ? 3 : 5;
-        int nameSlot = side == Side.LEFT ? 12 : 14;
-        int pageSlot = side == Side.LEFT ? LEFT_PAGE_SLOT : RIGHT_PAGE_SLOT;
+    private ItemStack selectorItem(Session session, Side side) {
         UUID playerId = session.players.get(side);
-        String name = "Fragezeichen";
-        ItemStack head = namedItem(Material.PAPER, "?");
-        if (playerId != null) {
-            Player player = Bukkit.getPlayer(playerId);
-            name = player != null ? player.getName() : "Spieler";
-            head = playerHead(player, name, session.chooser == side, session.winner == side);
+        if (playerId == null) {
+            return namedItem(side == Side.LEFT ? Material.SKELETON_SKULL : Material.WITHER_SKELETON_SKULL,
+                side == Side.LEFT ? "\u00A7fLinke Seite" : "\u00A7fRechte Seite");
         }
 
-        inventory.setItem(headSlot, head);
-        inventory.setItem(nameSlot, namedItem(Material.NAME_TAG, colorForSide(session, side) + name));
-        inventory.setItem(headerSlots[0], namedItem(Material.PAPER, "\u00A7fEigene Karten"));
-        inventory.setItem(headerSlots[1], namedItem(Material.MAP, "\u00A7bNeue Karten"));
-        inventory.setItem(headerSlots[2], namedItem(Material.BOOK, "\u00A77Seite " + (session.pages.get(side) + 1)));
-        inventory.setItem(pageSlot, namedItem(Material.PAPER, "\u00A77Seite " + (session.pages.get(side) + 1)));
-    }
-
-    private void renderButtons(Session session, Inventory inventory) {
-        inventory.setItem(COLLECT_SLOT, button(Material.LIME_DYE, "\u00A7aEinsammeln", session.transferMode == TransferMode.COLLECT));
-        inventory.setItem(RETURN_SLOT, button(Material.ORANGE_DYE, "\u00A76Gegnerkarten wiedergeben", session.transferMode == TransferMode.RETURN));
-        inventory.setItem(MODE_SLOT, namedItem(Material.COMPASS, "\u00A7eModus: " + session.mode.label));
-        inventory.setItem(TURN_SLOT, namedItem(Material.CLOCK, "\u00A7fDran: " + chooserName(session)));
-        inventory.setItem(LEFT_PREV_SLOT, namedItem(Material.ARROW, "\u00A77<"));
-        inventory.setItem(LEFT_NEXT_SLOT, namedItem(Material.ARROW, "\u00A77>"));
-        inventory.setItem(RIGHT_PREV_SLOT, namedItem(Material.ARROW, "\u00A77<"));
-        inventory.setItem(RIGHT_NEXT_SLOT, namedItem(Material.ARROW, "\u00A77>"));
-    }
-
-    private void renderCards(Session session, Inventory inventory, Side side, boolean newCards, int[] slots) {
-        List<ItemStack> source = newCards ? session.newCards.get(side) : session.ownCards.get(side);
-        int page = session.pages.get(side);
-        int startIndex = page * slots.length;
-        for (int i = 0; i < slots.length; i++) {
-            int itemIndex = startIndex + i;
-            if (itemIndex >= source.size()) {
-                continue;
+        Player player = Bukkit.getPlayer(playerId);
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta meta = (SkullMeta) head.getItemMeta();
+        if (meta != null) {
+            if (player != null) {
+                meta.setOwningPlayer(player);
             }
-            inventory.setItem(slots[i], source.get(itemIndex).clone());
+            meta.setDisplayName("\u00A7e" + playerText(session, side));
+            head.setItemMeta(meta);
         }
+        return head;
     }
 
-    private String chooserName(Session session) {
-        if (session.chooser == null) {
-            return "-";
+    private ItemStack infoBook() {
+        ItemStack book = new ItemStack(Material.BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("\u00A7eQuartett-Regeln");
+            meta.setLore(List.of(
+                "\u00A771. In der Kiste linke/rechte Seite w\u00e4hlen.",
+                "\u00A772. Mit TradingCard auf den Kopf \u00fcber der Kiste klicken.",
+                "\u00A773. Mitte klicken und Attribut w\u00e4hlen.",
+                "\u00A774. Beide Spieler decken ihre Karte selbst auf.",
+                "\u00A775. Gewinnerpfeil erscheint, Mitte klickt zum Abr\u00e4umen.",
+                "\u00A776. Gewonnene Karten behalten oder zur\u00fcckgeben."
+            ));
+            book.setItemMeta(meta);
         }
-        UUID chooserId = session.players.get(session.chooser);
-        Player player = chooserId == null ? null : Bukkit.getPlayer(chooserId);
-        return player != null ? player.getName() : session.chooser.label;
+        return book;
     }
 
-    private ItemStack button(Material material, String name, boolean active) {
+    private ItemStack activeButton(Material material, String name, boolean active) {
         ItemStack item = namedItem(material, name);
         if (!active) {
             return item;
         }
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return item;
+        if (meta != null) {
+            meta.addEnchant(Enchantment.LURE, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+            item.setItemMeta(meta);
         }
-        meta.addEnchant(Enchantment.LURE, 1, true);
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-        item.setItemMeta(meta);
         return item;
     }
 
-    private ItemStack playerHead(Player player, String name, boolean chooser, boolean winner) {
-        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
-        SkullMeta meta = (SkullMeta) head.getItemMeta();
-        if (meta == null) {
-            return head;
+    private ItemStack updatedInfoBook() {
+        ItemStack book = new ItemStack(Material.BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName("\u00A7eQuartett-Regeln");
+            meta.setLore(List.of(
+                "\u00A771. In der Kiste linke/rechte Seite w\u00e4hlen.",
+                "\u00A772. Karte auf deiner Seite ablegen und in der Mitte auf Klick mich klicken.",
+                "\u00A773. In der Mitte das Attribut w\u00e4hlen.",
+                "\u00A774. Beide Spieler decken ihre Karte selbst auf.",
+                "\u00A775. Der orange Pfeil zeigt den Gewinner, dann wieder Mitte klicken.",
+                "\u00A776. Unten Behalten oder Zur\u00fcckgeben dr\u00fccken."
+            ));
+            book.setItemMeta(meta);
         }
-        if (player != null) {
-            meta.setOwningPlayer(player);
+        return book;
+    }
+
+    private void renderCardArea(Session session, Inventory inventory, Side side, boolean newCards, int[] slots) {
+        List<ItemStack> source = newCards ? session.newCards.get(side) : session.ownCards.get(side);
+        int page = session.pages.get(side);
+        int start = page * slots.length;
+        for (int i = 0; i < slots.length; i++) {
+            int sourceIndex = start + i;
+            if (sourceIndex < source.size()) {
+                inventory.setItem(slots[i], source.get(sourceIndex).clone());
+            }
         }
-        String color = winner ? "\u00A7a" : chooser ? "\u00A7e" : "\u00A7f";
-        meta.setDisplayName(color + name);
-        if (chooser) {
-            meta.addEnchant(Enchantment.LURE, 1, true);
-            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+    }
+
+    private String winnerText(Session session) {
+        if (session.winner == null) {
+            return modeLabel(session);
         }
-        head.setItemMeta(meta);
-        return head;
+        UUID winnerId = session.players.get(session.winner);
+        Player winner = winnerId == null ? null : Bukkit.getPlayer(winnerId);
+        return winner != null ? winner.getName() : session.winner.label;
+    }
+
+    private String modeLabel(Session session) {
+        return session.mode == null ? "Klick mich" : session.mode.label;
+    }
+
+    private String transferText(TransferMode mode) {
+        return switch (mode) {
+            case COLLECT -> "Behalten";
+            case RETURN -> "Zur\u00fcckgeben";
+            case NONE -> "Noch nicht gew\u00e4hlt";
+        };
+    }
+
+    private String playerText(Session session, Side side) {
+        UUID playerId = session.players.get(side);
+        if (playerId == null) {
+            return "frei";
+        }
+        Player player = Bukkit.getPlayer(playerId);
+        return player != null ? player.getName() : "belegt";
     }
 
     private ItemStack namedItem(Material material, String name) {
@@ -682,14 +924,108 @@ public final class QuartettService {
         return item;
     }
 
-    private String colorForSide(Session session, Side side) {
-        if (session.winner == side) {
-            return "\u00A7a";
+    private ClickTarget resolveClickTarget(int rawSlot) {
+        ClickTarget target = match(rawSlot, Side.LEFT, false, LEFT_OWN_SLOTS);
+        if (target != null) {
+            return target;
         }
-        if (session.chooser == side) {
-            return "\u00A7e";
+        target = match(rawSlot, Side.RIGHT, false, RIGHT_OWN_SLOTS);
+        if (target != null) {
+            return target;
         }
-        return "\u00A7f";
+        target = match(rawSlot, Side.LEFT, true, LEFT_NEW_SLOTS);
+        if (target != null) {
+            return target;
+        }
+        return match(rawSlot, Side.RIGHT, true, RIGHT_NEW_SLOTS);
+    }
+
+    private ClickTarget match(int rawSlot, Side side, boolean newCards, int[] slots) {
+        for (int i = 0; i < slots.length; i++) {
+            if (slots[i] == rawSlot) {
+                return new ClickTarget(side, newCards, slots, i);
+            }
+        }
+        return null;
+    }
+
+    private boolean mayTake(Player player, Session session, Side side, ItemStack item) {
+        if (session.transferMode == TransferMode.NONE) {
+            return false;
+        }
+        if (session.transferMode == TransferMode.COLLECT) {
+            return session.sideOf(player.getUniqueId()) == side;
+        }
+        UUID owner = plugin.getCardService().getOwner(item);
+        return owner != null && owner.equals(player.getUniqueId());
+    }
+
+    private void changePage(Session session, Side side, int delta) {
+        int nextPage = session.pages.get(side) + delta;
+        int maxPage = Math.max(maxPage(session.ownCards.get(side), side == Side.LEFT ? LEFT_OWN_SLOTS.length : RIGHT_OWN_SLOTS.length),
+            maxPage(session.newCards.get(side), side == Side.LEFT ? LEFT_NEW_SLOTS.length : RIGHT_NEW_SLOTS.length));
+        session.pages.put(side, Math.max(0, Math.min(maxPage, nextPage)));
+        render(session);
+    }
+
+    private void normalizePages(Session session) {
+        for (Side side : Side.values()) {
+            int maxPage = Math.max(maxPage(session.ownCards.get(side), side == Side.LEFT ? LEFT_OWN_SLOTS.length : RIGHT_OWN_SLOTS.length),
+                maxPage(session.newCards.get(side), side == Side.LEFT ? LEFT_NEW_SLOTS.length : RIGHT_NEW_SLOTS.length));
+            session.pages.put(side, Math.max(0, Math.min(session.pages.get(side), maxPage)));
+        }
+    }
+
+    private int maxPage(List<ItemStack> items, int pageSize) {
+        return Math.max(0, (items.size() - 1) / pageSize);
+    }
+
+    private void resetParticipants(Session session) {
+        resetSession(session, false);
+    }
+
+    private void resetSession(Session session, boolean returnCardsToOwners) {
+        if (returnCardsToOwners) {
+            returnCardsToOwners(session);
+        } else {
+            clearRoundFrame(session, Side.LEFT);
+            clearRoundFrame(session, Side.RIGHT);
+            session.roundCards.clear();
+            clearStoredCards(session);
+        }
+        session.players.clear();
+        session.currentTurn = null;
+        session.mode = null;
+        session.winner = null;
+        session.roundResolved = false;
+        session.transferMode = TransferMode.NONE;
+        normalizePages(session);
+    }
+
+    private void returnCardsToOwners(Session session) {
+        Location payoutLocation = session.modeLocation();
+        for (Side side : Side.values()) {
+            for (ItemStack item : drainCards(session.ownCards.get(side))) {
+                giveCardToOwner(item, payoutLocation);
+            }
+        }
+        for (Side side : Side.values()) {
+            for (ItemStack item : drainCards(session.newCards.get(side))) {
+                giveCardToOwner(item, payoutLocation);
+            }
+        }
+        for (ItemStack item : new ArrayList<>(session.roundCards.values())) {
+            giveCardToOwner(item, payoutLocation);
+        }
+        clearRoundFrame(session, Side.LEFT);
+        clearRoundFrame(session, Side.RIGHT);
+        session.roundCards.clear();
+        clearStoredCards(session);
+    }
+
+    private void clearStoredCards(Session session) {
+        session.ownCards.values().forEach(List::clear);
+        session.newCards.values().forEach(List::clear);
     }
 
     private Chest resolveQuartettChest(Block block) {
@@ -702,8 +1038,7 @@ public final class QuartettService {
         if (!(chest.getInventory().getHolder() instanceof DoubleChest)) {
             return null;
         }
-        String customName = chest.getCustomName();
-        return "Quartett".equalsIgnoreCase(customName) ? chest : null;
+        return "Quartett".equalsIgnoreCase(chest.getCustomName()) ? chest : null;
     }
 
     private BlockFace facingOf(Block block) {
@@ -727,6 +1062,18 @@ public final class QuartettService {
         return a.compareTo(b) <= 0 ? a + "|" + b : b + "|" + a;
     }
 
+    private Session sessionForBlock(Block block) {
+        if (block == null) {
+            return null;
+        }
+        for (Session session : sessions.values()) {
+            if (session.leftBlock.equals(block) || session.rightBlock.equals(block)) {
+                return session;
+            }
+        }
+        return null;
+    }
+
     private void consumeOne(Player player, ItemStack item) {
         if (player.getGameMode() == org.bukkit.GameMode.CREATIVE) {
             return;
@@ -743,10 +1090,6 @@ public final class QuartettService {
         Side(String label) {
             this.label = label;
         }
-
-        public Side other() {
-            return this == LEFT ? RIGHT : LEFT;
-        }
     }
 
     private enum TransferMode {
@@ -758,7 +1101,7 @@ public final class QuartettService {
     private enum CompareMode {
         LEBEN("Leben"),
         HUNGER("Hunger"),
-        RUESTUNG("Ruestung"),
+        RUESTUNG("R\u00fcstung"),
         KRAFT("Kraft"),
         WERTIGKEIT("Wertigkeit");
 
@@ -768,7 +1111,7 @@ public final class QuartettService {
             this.label = label;
         }
 
-        public CompareMode next() {
+        private CompareMode next() {
             CompareMode[] values = values();
             return values[(ordinal() + 1) % values.length];
         }
@@ -783,19 +1126,20 @@ public final class QuartettService {
         private final Block rightBlock;
         private final BlockFace facing;
         private final Map<Side, UUID> players = new EnumMap<>(Side.class);
-        private final Map<Side, ArmorStand> slotStands = new EnumMap<>(Side.class);
-        private final Map<Side, Interaction> slotInteractions = new EnumMap<>(Side.class);
-        private final Map<Side, ItemFrame> cardFrames = new EnumMap<>(Side.class);
+        private final Map<Side, ArmorStand> headStands = new EnumMap<>(Side.class);
+        private final Map<Side, Interaction> headInteractions = new EnumMap<>(Side.class);
+        private final Map<Side, ItemFrame> roundFrames = new EnumMap<>(Side.class);
         private final Map<Side, ItemStack> roundCards = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> ownCards = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> newCards = new EnumMap<>(Side.class);
         private final Map<Side, Integer> pages = new EnumMap<>(Side.class);
-        private ArmorStand centerStand;
-        private Interaction centerInteraction;
-        private CompareMode mode = CompareMode.LEBEN;
+        private ArmorStand modeStand;
+        private Interaction modeInteraction;
+        private Side currentTurn;
+        private CompareMode mode;
         private TransferMode transferMode = TransferMode.NONE;
-        private Side chooser = Side.LEFT;
         private Side winner;
+        private boolean roundResolved;
 
         private Session(String id, Block leftBlock, Block rightBlock, BlockFace facing) {
             this.id = id;
@@ -811,24 +1155,25 @@ public final class QuartettService {
         }
 
         private boolean isValid() {
-            return centerStand != null && centerStand.isValid();
+            return modeStand != null && modeStand.isValid();
         }
 
         private void clearWorldState() {
-            clearFrame(this, Side.LEFT);
-            clearFrame(this, Side.RIGHT);
-            if (centerStand != null) {
-                centerStand.remove();
+            clearRoundFrame(this, Side.LEFT);
+            clearRoundFrame(this, Side.RIGHT);
+            roundCards.clear();
+            if (modeStand != null) {
+                modeStand.remove();
             }
-            if (centerInteraction != null) {
-                centerInteraction.remove();
+            if (modeInteraction != null) {
+                modeInteraction.remove();
             }
-            slotStands.values().forEach(ArmorStand::remove);
-            slotInteractions.values().forEach(Interaction::remove);
-            slotStands.clear();
-            slotInteractions.clear();
-            centerStand = null;
-            centerInteraction = null;
+            headStands.values().forEach(ArmorStand::remove);
+            headInteractions.values().forEach(Interaction::remove);
+            headStands.clear();
+            headInteractions.clear();
+            modeStand = null;
+            modeInteraction = null;
         }
 
         private Side sideOf(UUID playerId) {
@@ -840,16 +1185,19 @@ public final class QuartettService {
             return null;
         }
 
-        private Location centerLocation() {
+        private Location modeLocation() {
             double x = (leftBlock.getX() + rightBlock.getX()) / 2.0D + 0.5D;
-            double y = leftBlock.getY() + 1.8D;
             double z = (leftBlock.getZ() + rightBlock.getZ()) / 2.0D + 0.5D;
-            return new Location(leftBlock.getWorld(), x, y, z);
+            return new Location(leftBlock.getWorld(), x, leftBlock.getY() + 1.15D, z);
         }
 
-        private Location sideLocation(Side side) {
+        private Location headLocation(Side side) {
             Block block = side == Side.LEFT ? leftBlock : rightBlock;
-            return block.getLocation().add(0.5, 1.05, 0.5);
+            return block.getLocation().add(0.5, 0.72, 0.5);
+        }
+
+        private Location headClickLocation(Side side) {
+            return headLocation(side).clone().add(0.0, 0.05, 0.0);
         }
 
         private Block cardBlock(Side side) {
@@ -864,22 +1212,12 @@ public final class QuartettService {
             return chest.getInventory();
         }
 
-        private boolean usesBlock(Block block) {
-            return leftBlock.equals(block) || rightBlock.equals(block);
+        private List<ItemStack> allStoredCards() {
+            List<ItemStack> cards = new ArrayList<>();
+            ownCards.values().forEach(list -> list.forEach(item -> cards.add(item.clone())));
+            newCards.values().forEach(list -> list.forEach(item -> cards.add(item.clone())));
+            roundCards.values().forEach(item -> cards.add(item.clone()));
+            return cards;
         }
-
-        private List<ItemStack> dropItems() {
-            List<ItemStack> items = new ArrayList<>();
-            ownCards.values().forEach(list -> list.forEach(item -> items.add(item.clone())));
-            newCards.values().forEach(list -> list.forEach(item -> items.add(item.clone())));
-            return items;
-        }
-    }
-
-    private void resetParticipants(Session session) {
-        session.players.clear();
-        session.chooser = Side.LEFT;
-        session.winner = null;
-        session.transferMode = TransferMode.NONE;
     }
 }

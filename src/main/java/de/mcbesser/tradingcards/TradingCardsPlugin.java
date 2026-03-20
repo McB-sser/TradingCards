@@ -27,7 +27,10 @@ public final class TradingCardsPlugin extends JavaPlugin {
         registerCommands();
         getServer().getPluginManager().registerEvents(new TradingCardListener(this), this);
         getServer().getPluginManager().registerEvents(new QuartettListener(this, quartettService), this);
-        getServer().getScheduler().runTask(this, () -> cardService.rebindLoadedMaps());
+        getServer().getScheduler().runTask(this, () -> {
+            cardService.rebindLoadedMaps();
+            quartettService.ensureSessionsInLoadedChunks();
+        });
     }
 
     @Override

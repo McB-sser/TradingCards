@@ -44,6 +44,9 @@ public final class TradingCardListener implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK && event.getAction() != Action.LEFT_CLICK_BLOCK) {
             return;
         }
+        if (plugin.getQuartettService() != null && plugin.getQuartettService().isQuartettChest(event.getClickedBlock())) {
+            return;
+        }
 
         ItemStack item = event.getItem();
         if (!plugin.getCardService().isTradingCardItem(item)) {
@@ -84,9 +87,9 @@ public final class TradingCardListener implements Listener {
         Block displayTop = mode == DisplayMode.FULL ? supportTop.getRelative(face) : null;
         if (!canPlaceDisplay(mode, supportBottom, supportMiddle, supportTop, displayBottom, displayMiddle, displayTop)) {
             event.getPlayer().sendMessage(switch (mode) {
-                case FULL -> "Nicht genug Platz fuer eine 1x3 Kartenanzeige.";
-                case IMAGE_ONLY -> "Nicht genug Platz fuer eine 1x2 Bildanzeige.";
-                case CARD_ONLY -> "Nicht genug Platz fuer eine Wertekarte.";
+                case FULL -> "Nicht genug Platz f\u00fcr eine 1x3 Kartenanzeige.";
+                case IMAGE_ONLY -> "Nicht genug Platz f\u00fcr eine 1x2 Bildanzeige.";
+                case CARD_ONLY -> "Nicht genug Platz f\u00fcr eine Wertekarte.";
             });
             event.setCancelled(true);
             return;
@@ -166,6 +169,11 @@ public final class TradingCardListener implements Listener {
         if (!event.getPlayer().hasPermission("tradingcards.place")) {
             return;
         }
+        if (plugin.getQuartettService() != null
+            && plugin.getQuartettService().isQuartettRoundFrame(frame)
+            && !plugin.getQuartettService().canRevealQuartettFrame(event.getPlayer(), frame)) {
+            return;
+        }
         ItemStack item = frame.getItem();
         java.util.UUID owner = plugin.getCardService().getOwner(item);
         if (owner != null && !owner.equals(event.getPlayer().getUniqueId())) {
@@ -174,6 +182,9 @@ public final class TradingCardListener implements Listener {
         }
         if (plugin.getCardService().toggleHidden(item)) {
             frame.setItem(item, false);
+            if (plugin.getQuartettService() != null && plugin.getQuartettService().isQuartettRoundFrame(frame)) {
+                plugin.getQuartettService().refreshRoundState(frame);
+            }
         }
     }
 

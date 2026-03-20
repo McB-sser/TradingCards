@@ -17,7 +17,7 @@ public final class PosterMapRenderer extends MapRenderer {
     private boolean rendered;
 
     public PosterMapRenderer(LoadedMotif motif, int segmentIndex, de.mcbesser.tradingcards.CardStats stats, int panelCount) {
-        super(true);
+        super(false);
         int displayHeight = panelCount * MAP_SIZE;
         BufferedImage display = new BufferedImage(MAP_SIZE, displayHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = display.createGraphics();

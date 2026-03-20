@@ -24,7 +24,7 @@ public final class MetadataMapRenderer extends MapRenderer {
     private boolean rendered;
 
     public MetadataMapRenderer(LoadedMotif motif, de.mcbesser.tradingcards.CardStats stats, boolean hidden, boolean standalone) {
-        super(true);
+        super(false);
         this.image = createCardImage(motif, stats, hidden, standalone);
     }
 
@@ -64,7 +64,7 @@ public final class MetadataMapRenderer extends MapRenderer {
         graphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, 13));
         drawCenteredLinesInArea(graphics, limitLines(wrapText(displayTitle(motif, metadata), 12), 2), 25, 18, 106, 12);
 
-        graphics.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 8));
+        graphics.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 9));
         drawCenteredColoredLines(
             graphics,
             limitLines(wrapText(metadata.description(), 17), 3),

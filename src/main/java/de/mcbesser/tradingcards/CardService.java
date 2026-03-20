@@ -67,9 +67,9 @@ public final class CardService {
 
         meta.setDisplayName(motif.displayName());
         List<String> lore = new ArrayList<>(buildLore(motif, stats));
-        lore.add(ChatColor.YELLOW + "Rechtsklick fuer 1x3 Anzeige.");
-        lore.add(ChatColor.YELLOW + "Schleichend rechts fuer 1x2 Bild.");
-        lore.add(ChatColor.YELLOW + "Schleichend links fuer Wertekarte.");
+        lore.add(ChatColor.YELLOW + "Rechtsklick f\u00fcr 1x3 Anzeige.");
+        lore.add(ChatColor.YELLOW + "Schleichend rechts f\u00fcr 1x2 Bild.");
+        lore.add(ChatColor.YELLOW + "Schleichend links f\u00fcr Wertekarte.");
         meta.setLore(lore);
 
         PersistentDataContainer data = meta.getPersistentDataContainer();
@@ -392,13 +392,13 @@ public final class CardService {
         }
         lore.add(ChatColor.RED + "Leben: " + ChatColor.WHITE + String.valueOf(stats.health()));
         lore.add(ChatColor.GOLD + "Hunger: " + ChatColor.WHITE + String.valueOf(stats.hunger()));
-        lore.add(ChatColor.BLUE + "Ruestung: " + ChatColor.WHITE + String.valueOf(stats.armor()));
+        lore.add(ChatColor.BLUE + "R\u00fcstung: " + ChatColor.WHITE + String.valueOf(stats.armor()));
         lore.add(ChatColor.LIGHT_PURPLE + "Kraft: " + ChatColor.WHITE + String.valueOf(stats.strength()));
         double multiplier = rarityMultiplier(metadata.rarity());
         lore.add(ChatColor.GRAY + "Multiplikator: " + ChatColor.WHITE + "x" + String.format(java.util.Locale.US, "%.2f", multiplier));
         lore.add(ChatColor.YELLOW + "Kartenwert: " + ChatColor.WHITE + String.valueOf(cardValue(stats, multiplier)));
         if (metadata.artist() != null) {
-            lore.add(ChatColor.GRAY + "Kuenstler: " + ChatColor.WHITE + metadata.artist());
+            lore.add(ChatColor.GRAY + "K\u00fcnstler: " + ChatColor.WHITE + metadata.artist());
         }
         if (metadata.description() != null) {
             lore.addAll(wrapLoreLine(ChatColor.WHITE, metadata.description()));
