@@ -24,6 +24,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
         this.quartettService = new QuartettService(this);
 
         reloadMotifs();
+        quartettService.loadPersistedSessions();
         registerCommands();
         getServer().getPluginManager().registerEvents(new TradingCardListener(this), this);
         getServer().getPluginManager().registerEvents(new QuartettListener(this, quartettService), this);
@@ -36,6 +37,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (quartettService != null) {
+            quartettService.savePersistedSessions();
             quartettService.shutdown();
         }
     }

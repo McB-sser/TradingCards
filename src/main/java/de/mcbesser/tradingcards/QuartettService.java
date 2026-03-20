@@ -1,13 +1,19 @@
 package de.mcbesser.tradingcards;
 
 import de.mcbesser.tradingcards.image.LoadedMotif;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -22,15 +28,18 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Interaction;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
-import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.io.BukkitObjectInputStream;
+import org.bukkit.util.io.BukkitObjectOutputStream;
 
 public final class QuartettService {
 
@@ -62,13 +71,16 @@ public final class QuartettService {
     private final NamespacedKey quartettSessionKey;
     private final NamespacedKey quartettTypeKey;
     private final NamespacedKey quartettSideKey;
+    private final File sessionsFile;
     private final Map<String, Session> sessions = new HashMap<>();
+    private final Map<String, SessionSnapshot> storedSnapshots = new HashMap<>();
 
     public QuartettService(TradingCardsPlugin plugin) {
         this.plugin = plugin;
         this.quartettSessionKey = new NamespacedKey(plugin, "quartett_session");
         this.quartettTypeKey = new NamespacedKey(plugin, "quartett_type");
         this.quartettSideKey = new NamespacedKey(plugin, "quartett_side");
+        this.sessionsFile = new File(plugin.getDataFolder(), "quartett-sessions.yml");
     }
 
     public Session ensureSession(Block block) {
@@ -84,11 +96,14 @@ public final class QuartettService {
         if (session == null) {
             session = new Session(sessionId, leftChest.getBlock(), rightChest.getBlock(), facingOf(leftChest.getBlock()));
             sessions.put(sessionId, session);
+            applySnapshot(session, storedSnapshots.remove(sessionId));
             spawnDisplay(session);
+            restoreRoundFrames(session);
         }
         if (!session.isValid()) {
             session.clearWorldState();
             spawnDisplay(session);
+            restoreRoundFrames(session);
         }
         render(session);
         return session;
@@ -121,6 +136,47 @@ public final class QuartettService {
         }
     }
 
+    public void loadPersistedSessions() {
+        storedSnapshots.clear();
+        if (!sessionsFile.isFile()) {
+            return;
+        }
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(sessionsFile);
+        ConfigurationSection sessionsSection = config.getConfigurationSection("sessions");
+        if (sessionsSection == null) {
+            return;
+        }
+
+        for (String sessionId : sessionsSection.getKeys(false)) {
+            ConfigurationSection section = sessionsSection.getConfigurationSection(sessionId);
+            if (section == null) {
+                continue;
+            }
+            SessionSnapshot snapshot = readSnapshot(section);
+            if (snapshot != null) {
+                storedSnapshots.put(sessionId, snapshot);
+            }
+        }
+    }
+
+    public void savePersistedSessions() {
+        YamlConfiguration config = new YamlConfiguration();
+        for (Map.Entry<String, SessionSnapshot> entry : storedSnapshots.entrySet()) {
+            ConfigurationSection section = config.createSection("sessions." + entry.getKey());
+            writeSnapshot(section, entry.getValue());
+        }
+        for (Map.Entry<String, Session> entry : sessions.entrySet()) {
+            ConfigurationSection section = config.createSection("sessions." + entry.getKey());
+            writeSnapshot(section, entry.getValue());
+        }
+        try {
+            config.save(sessionsFile);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Quartett-Sessions konnten nicht gespeichert werden: " + exception.getMessage());
+        }
+    }
+
     public void clearQuartettEntitiesInChunk(Chunk chunk) {
         if (chunk == null) {
             return;
@@ -129,6 +185,166 @@ public final class QuartettService {
             if (isQuartettEntity(entity)) {
                 entity.remove();
             }
+        }
+    }
+
+    private SessionSnapshot readSnapshot(ConfigurationSection section) {
+        try {
+            Map<Side, UUID> players = new EnumMap<>(Side.class);
+            Map<Side, List<ItemStack>> ownCards = new EnumMap<>(Side.class);
+            Map<Side, List<ItemStack>> newCards = new EnumMap<>(Side.class);
+            Map<Side, ItemStack> roundCards = new EnumMap<>(Side.class);
+            Map<Side, Boolean> roundHidden = new EnumMap<>(Side.class);
+            Map<Side, Integer> pages = new EnumMap<>(Side.class);
+
+            for (Side side : Side.values()) {
+                String playerId = section.getString("players." + side.name());
+                if (playerId != null && !playerId.isBlank()) {
+                    players.put(side, UUID.fromString(playerId));
+                }
+                ownCards.put(side, deserializeItems(section.getStringList("ownCards." + side.name())));
+                newCards.put(side, deserializeItems(section.getStringList("newCards." + side.name())));
+                String roundCard = section.getString("roundCards." + side.name());
+                if (roundCard != null && !roundCard.isBlank()) {
+                    roundCards.put(side, deserializeItem(roundCard));
+                }
+                roundHidden.put(side, section.getBoolean("roundHidden." + side.name(), true));
+                pages.put(side, section.getInt("pages." + side.name(), 0));
+            }
+
+            return new SessionSnapshot(
+                players,
+                ownCards,
+                newCards,
+                roundCards,
+                roundHidden,
+                pages,
+                parseSide(section.getString("currentTurn")),
+                parseMode(section.getString("mode")),
+                parseTransferMode(section.getString("transferMode")),
+                parseSide(section.getString("winner")),
+                section.getBoolean("roundResolved", false)
+            );
+        } catch (Exception exception) {
+            plugin.getLogger().warning("Quartett-Snapshot konnte nicht geladen werden: " + exception.getMessage());
+            return null;
+        }
+    }
+
+    private void writeSnapshot(ConfigurationSection section, Session session) {
+        writeSnapshot(section, new SessionSnapshot(
+            new EnumMap<>(session.players),
+            copyCardMap(session.ownCards),
+            copyCardMap(session.newCards),
+            new EnumMap<>(session.roundCards),
+            new EnumMap<>(session.roundHidden),
+            new EnumMap<>(session.pages),
+            session.currentTurn,
+            session.mode,
+            session.transferMode,
+            session.winner,
+            session.roundResolved
+        ));
+    }
+
+    private void writeSnapshot(ConfigurationSection section, SessionSnapshot snapshot) {
+        for (Side side : Side.values()) {
+            UUID playerId = snapshot.players().get(side);
+            if (playerId != null) {
+                section.set("players." + side.name(), playerId.toString());
+            }
+            section.set("ownCards." + side.name(), serializeItems(snapshot.ownCards().get(side)));
+            section.set("newCards." + side.name(), serializeItems(snapshot.newCards().get(side)));
+            ItemStack roundCard = snapshot.roundCards().get(side);
+            if (roundCard != null) {
+                section.set("roundCards." + side.name(), serializeItem(roundCard));
+            }
+            section.set("roundHidden." + side.name(), snapshot.roundHidden().getOrDefault(side, true));
+            section.set("pages." + side.name(), snapshot.pages().getOrDefault(side, 0));
+        }
+        section.set("currentTurn", snapshot.currentTurn() == null ? null : snapshot.currentTurn().name());
+        section.set("mode", snapshot.mode() == null ? null : snapshot.mode().name());
+        section.set("transferMode", snapshot.transferMode().name());
+        section.set("winner", snapshot.winner() == null ? null : snapshot.winner().name());
+        section.set("roundResolved", snapshot.roundResolved());
+    }
+
+    private Map<Side, List<ItemStack>> copyCardMap(Map<Side, List<ItemStack>> source) {
+        Map<Side, List<ItemStack>> copy = new EnumMap<>(Side.class);
+        for (Side side : Side.values()) {
+            copy.put(side, cloneItems(source.get(side)));
+        }
+        return copy;
+    }
+
+    private List<String> serializeItems(List<ItemStack> items) {
+        List<String> serialized = new ArrayList<>();
+        if (items == null) {
+            return serialized;
+        }
+        for (ItemStack item : items) {
+            serialized.add(serializeItem(item));
+        }
+        return serialized;
+    }
+
+    private List<ItemStack> deserializeItems(List<String> encodedItems) throws IOException, ClassNotFoundException {
+        List<ItemStack> items = new ArrayList<>();
+        for (String encodedItem : encodedItems) {
+            items.add(deserializeItem(encodedItem));
+        }
+        return items;
+    }
+
+    private String serializeItem(ItemStack item) {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try (BukkitObjectOutputStream objectOutputStream = new BukkitObjectOutputStream(outputStream)) {
+                objectOutputStream.writeObject(item);
+            }
+            return Base64.getEncoder().encodeToString(outputStream.toByteArray());
+        } catch (IOException exception) {
+            throw new IllegalStateException("ItemStack konnte nicht serialisiert werden.", exception);
+        }
+    }
+
+    private ItemStack deserializeItem(String encodedItem) throws IOException, ClassNotFoundException {
+        byte[] data = Base64.getDecoder().decode(encodedItem);
+        try (BukkitObjectInputStream objectInputStream = new BukkitObjectInputStream(new ByteArrayInputStream(data))) {
+            return (ItemStack) objectInputStream.readObject();
+        }
+    }
+
+    private Side parseSide(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Side.valueOf(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private CompareMode parseMode(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return CompareMode.valueOf(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private TransferMode parseTransferMode(String value) {
+        if (value == null || value.isBlank()) {
+            return TransferMode.NONE;
+        }
+        try {
+            return TransferMode.valueOf(value);
+        } catch (IllegalArgumentException ignored) {
+            return TransferMode.NONE;
         }
     }
 
@@ -379,11 +595,97 @@ public final class QuartettService {
         }
         for (Session session : sessions.values()) {
             if (session.roundFrames.containsValue(frame)) {
+                for (Map.Entry<Side, ItemFrame> entry : session.roundFrames.entrySet()) {
+                    if (frame.equals(entry.getValue())) {
+                        session.roundHidden.put(entry.getKey(), plugin.getCardService().isHidden(frame.getItem()));
+                    }
+                }
                 updateWinner(session);
                 render(session);
                 return;
             }
         }
+    }
+
+    private void applySnapshot(Session session, SessionSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        session.players.putAll(snapshot.players());
+        for (Side side : Side.values()) {
+            session.ownCards.get(side).addAll(cloneItems(snapshot.ownCards().get(side)));
+            session.newCards.get(side).addAll(cloneItems(snapshot.newCards().get(side)));
+            session.pages.put(side, snapshot.pages().getOrDefault(side, 0));
+            ItemStack roundCard = snapshot.roundCards().get(side);
+            if (roundCard != null) {
+                session.roundCards.put(side, roundCard.clone());
+            }
+            session.roundHidden.put(side, snapshot.roundHidden().getOrDefault(side, true));
+        }
+        session.currentTurn = snapshot.currentTurn();
+        session.mode = snapshot.mode();
+        session.transferMode = snapshot.transferMode();
+        session.winner = snapshot.winner();
+        session.roundResolved = snapshot.roundResolved();
+        normalizePages(session);
+    }
+
+    private void restoreRoundFrames(Session session) {
+        for (Side side : Side.values()) {
+            if (session.roundFrames.containsKey(side)) {
+                continue;
+            }
+            ItemStack storedCard = session.roundCards.get(side);
+            if (storedCard == null) {
+                continue;
+            }
+            spawnRoundFrame(session, side, storedCard, session.roundHidden.getOrDefault(side, true));
+        }
+        updateWinner(session);
+    }
+
+    private void spawnRoundFrame(Session session, Side side, ItemStack storedCard, boolean hidden) {
+        String motifId = plugin.getCardService().getMotifId(storedCard);
+        LoadedMotif motif = motifId == null ? null : plugin.getMotifRegistry().find(motifId);
+        if (motif == null) {
+            return;
+        }
+
+        Block cardBlock = session.cardBlock(side);
+        if (cardBlock.getType() != Material.AIR) {
+            return;
+        }
+
+        CardStats stats = plugin.getCardService().getStats(storedCard);
+        String displayId = UUID.randomUUID().toString();
+        ItemStack displayCard = plugin.getCardService().createPlacedDisplayItems(motif, displayId, 1, true, stats).get(0);
+        UUID ownerId = plugin.getCardService().getOwner(storedCard);
+        if (ownerId != null) {
+            plugin.getCardService().setOwner(displayCard, ownerId);
+        }
+        if (!hidden) {
+            plugin.getCardService().toggleHidden(displayCard);
+        }
+
+        ItemFrame frame = cardBlock.getWorld().spawn(cardBlock.getLocation(), ItemFrame.class, spawned -> {
+            spawned.setFacingDirection(session.facing, true);
+            spawned.setVisible(false);
+            spawned.setItem(displayCard, false);
+            PersistentDataContainer data = spawned.getPersistentDataContainer();
+            data.set(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING, displayId);
+            data.set(plugin.getCardService().getPanelIndexKey(), PersistentDataType.INTEGER, 0);
+            data.set(plugin.getCardService().getMotifIdKey(), PersistentDataType.STRING, motif.id());
+        });
+        session.roundFrames.put(side, frame);
+    }
+
+    private List<ItemStack> cloneItems(List<ItemStack> items) {
+        List<ItemStack> copy = new ArrayList<>();
+        if (items == null) {
+            return copy;
+        }
+        items.forEach(item -> copy.add(item.clone()));
+        return copy;
     }
 
     public void cleanupSession(Block block, boolean dropCards) {
@@ -451,6 +753,7 @@ public final class QuartettService {
 
         session.roundFrames.put(side, frame);
         session.roundCards.put(side, storedCard.clone());
+        session.roundHidden.put(side, true);
         session.ownCards.get(side).add(storedCard.clone());
         consumeOne(player, held);
         updateWinner(session);
@@ -558,6 +861,7 @@ public final class QuartettService {
 
     private void clearRoundFrame(Session session, Side side) {
         ItemFrame frame = session.roundFrames.remove(side);
+        session.roundHidden.remove(side);
         if (frame == null) {
             return;
         }
@@ -1120,6 +1424,21 @@ public final class QuartettService {
     private record ClickTarget(Side side, boolean newCards, int[] slots, int index) {
     }
 
+    private record SessionSnapshot(
+        Map<Side, UUID> players,
+        Map<Side, List<ItemStack>> ownCards,
+        Map<Side, List<ItemStack>> newCards,
+        Map<Side, ItemStack> roundCards,
+        Map<Side, Boolean> roundHidden,
+        Map<Side, Integer> pages,
+        Side currentTurn,
+        CompareMode mode,
+        TransferMode transferMode,
+        Side winner,
+        boolean roundResolved
+    ) {
+    }
+
     public final class Session {
         private final String id;
         private final Block leftBlock;
@@ -1130,6 +1449,7 @@ public final class QuartettService {
         private final Map<Side, Interaction> headInteractions = new EnumMap<>(Side.class);
         private final Map<Side, ItemFrame> roundFrames = new EnumMap<>(Side.class);
         private final Map<Side, ItemStack> roundCards = new EnumMap<>(Side.class);
+        private final Map<Side, Boolean> roundHidden = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> ownCards = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> newCards = new EnumMap<>(Side.class);
         private final Map<Side, Integer> pages = new EnumMap<>(Side.class);
@@ -1159,9 +1479,8 @@ public final class QuartettService {
         }
 
         private void clearWorldState() {
-            clearRoundFrame(this, Side.LEFT);
-            clearRoundFrame(this, Side.RIGHT);
-            roundCards.clear();
+            clearRoundEntity(Side.LEFT);
+            clearRoundEntity(Side.RIGHT);
             if (modeStand != null) {
                 modeStand.remove();
             }
@@ -1174,6 +1493,15 @@ public final class QuartettService {
             headInteractions.clear();
             modeStand = null;
             modeInteraction = null;
+        }
+
+        private void clearRoundEntity(Side side) {
+            ItemFrame frame = roundFrames.remove(side);
+            if (frame == null) {
+                return;
+            }
+            frame.setItem(null, false);
+            frame.remove();
         }
 
         private Side sideOf(UUID playerId) {
