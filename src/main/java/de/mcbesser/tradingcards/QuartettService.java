@@ -17,6 +17,7 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.BlockFace;
@@ -98,11 +99,13 @@ public final class QuartettService {
             sessions.put(sessionId, session);
             applySnapshot(session, storedSnapshots.remove(sessionId));
             spawnDisplay(session);
+            clearExistingRoundFrames(session);
             restoreRoundFrames(session);
         }
         if (!session.isValid()) {
             session.clearWorldState();
             spawnDisplay(session);
+            clearExistingRoundFrames(session);
             restoreRoundFrames(session);
         }
         render(session);
@@ -671,6 +674,7 @@ public final class QuartettService {
             spawned.setFacingDirection(session.facing, true);
             spawned.setVisible(false);
             spawned.setItem(displayCard, false);
+            stamp(spawned, session.id, "round", side);
             PersistentDataContainer data = spawned.getPersistentDataContainer();
             data.set(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING, displayId);
             data.set(plugin.getCardService().getPanelIndexKey(), PersistentDataType.INTEGER, 0);
@@ -686,6 +690,21 @@ public final class QuartettService {
         }
         items.forEach(item -> copy.add(item.clone()));
         return copy;
+    }
+
+    private void clearExistingRoundFrames(Session session) {
+        for (Side side : Side.values()) {
+            Block cardBlock = session.cardBlock(side);
+            Location location = cardBlock.getLocation().add(0.5, 0.5, 0.5);
+            for (Entity entity : cardBlock.getWorld().getNearbyEntities(location, 1.0, 1.0, 1.0)) {
+                if (entity instanceof ItemFrame frame
+                    && frame.getPersistentDataContainer().has(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING)
+                    && frame.getLocation().getBlock().equals(cardBlock)) {
+                    frame.setItem(null, false);
+                    frame.remove();
+                }
+            }
+        }
     }
 
     public void cleanupSession(Block block, boolean dropCards) {
@@ -745,6 +764,7 @@ public final class QuartettService {
             spawned.setFacingDirection(session.facing, true);
             spawned.setVisible(false);
             spawned.setItem(displayCard, false);
+            stamp(spawned, session.id, "round", side);
             PersistentDataContainer data = spawned.getPersistentDataContainer();
             data.set(plugin.getCardService().getDisplayIdKey(), PersistentDataType.STRING, displayId);
             data.set(plugin.getCardService().getPanelIndexKey(), PersistentDataType.INTEGER, 0);
@@ -1008,13 +1028,11 @@ public final class QuartettService {
                 continue;
             }
 
-            Player player = Bukkit.getPlayer(playerId);
+            OfflinePlayer player = Bukkit.getOfflinePlayer(playerId);
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta meta = (SkullMeta) head.getItemMeta();
             if (meta != null) {
-                if (player != null) {
-                    meta.setOwningPlayer(player);
-                }
+                meta.setOwningPlayer(player);
                 if (session.winner == side) {
                     meta.addEnchant(Enchantment.LURE, 1, true);
                     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
@@ -1113,13 +1131,11 @@ public final class QuartettService {
                 side == Side.LEFT ? "\u00A7fLinke Seite" : "\u00A7fRechte Seite");
         }
 
-        Player player = Bukkit.getPlayer(playerId);
+        OfflinePlayer player = Bukkit.getOfflinePlayer(playerId);
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         if (meta != null) {
-            if (player != null) {
-                meta.setOwningPlayer(player);
-            }
+            meta.setOwningPlayer(player);
             meta.setDisplayName("\u00A7e" + playerText(session, side));
             head.setItemMeta(meta);
         }
@@ -1214,8 +1230,8 @@ public final class QuartettService {
         if (playerId == null) {
             return "frei";
         }
-        Player player = Bukkit.getPlayer(playerId);
-        return player != null ? player.getName() : "belegt";
+        OfflinePlayer player = Bukkit.getOfflinePlayer(playerId);
+        return player.getName() != null ? player.getName() : "belegt";
     }
 
     private ItemStack namedItem(Material material, String name) {
@@ -1544,7 +1560,6 @@ public final class QuartettService {
             List<ItemStack> cards = new ArrayList<>();
             ownCards.values().forEach(list -> list.forEach(item -> cards.add(item.clone())));
             newCards.values().forEach(list -> list.forEach(item -> cards.add(item.clone())));
-            roundCards.values().forEach(item -> cards.add(item.clone()));
             return cards;
         }
     }

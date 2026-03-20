@@ -3,6 +3,7 @@ package de.mcbesser.tradingcards;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -31,12 +32,18 @@ public final class QuartettListener implements Listener {
         quartettService.ensureSession(event.getInventory());
     }
 
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onQuartettChestBreak(BlockBreakEvent event) {
         if (!quartettService.isQuartettChest(event.getBlock())) {
             return;
         }
-        quartettService.cleanupSession(event.getBlock(), true);
+        Block block = event.getBlock();
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (quartettService.isQuartettChest(block)) {
+                return;
+            }
+            quartettService.cleanupSession(block, true);
+        });
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
@@ -51,7 +58,7 @@ public final class QuartettListener implements Listener {
 
     @EventHandler
     public void onQuartettChunkLoad(ChunkLoadEvent event) {
-        quartettService.ensureSessionsInChunk(event.getChunk());
+        plugin.getServer().getScheduler().runTask(plugin, () -> quartettService.ensureSessionsInChunk(event.getChunk()));
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
@@ -81,6 +88,9 @@ public final class QuartettListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     public void onQuartettHologramInteract(PlayerInteractEntityEvent event) {
         Entity clicked = event.getRightClicked();
+        if (clicked instanceof ItemFrame) {
+            return;
+        }
         if (!quartettService.isQuartettEntity(clicked)) {
             return;
         }

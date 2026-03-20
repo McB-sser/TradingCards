@@ -32,6 +32,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
             cardService.rebindLoadedMaps();
             quartettService.ensureSessionsInLoadedChunks();
         });
+        getServer().getScheduler().runTaskLater(this, quartettService::ensureSessionsInLoadedChunks, 20L);
     }
 
     @Override
