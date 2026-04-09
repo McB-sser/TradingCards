@@ -292,7 +292,11 @@ public final class CardService {
             return;
         }
         MapMeta meta = (MapMeta) item.getItemMeta();
-        if (meta == null || meta.getMapView() == null) {
+        if (meta == null || !meta.hasMapView()) {
+            return;
+        }
+        MapView mapView = meta.getMapView();
+        if (mapView == null) {
             return;
         }
 
@@ -328,7 +332,7 @@ public final class CardService {
         } else {
             panelCount = panelIndex >= 2 ? 3 : 2;
         }
-        rebindMapView(meta.getMapView(), motif, panelIndex, metadataView, hiddenPanel, stats, panelCount);
+        rebindMapView(mapView, motif, panelIndex, metadataView, hiddenPanel, stats, panelCount);
         item.setItemMeta(meta);
     }
 
