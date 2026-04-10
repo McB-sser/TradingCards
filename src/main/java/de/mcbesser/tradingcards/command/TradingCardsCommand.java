@@ -1,4 +1,4 @@
-package de.mcbesser.tradingcards.command;
+﻿package de.mcbesser.tradingcards.command;
 
 import de.mcbesser.tradingcards.TradingCardsPlugin;
 import de.mcbesser.tradingcards.image.LoadedMotif;
@@ -49,7 +49,7 @@ public final class TradingCardsCommand implements CommandExecutor, TabCompleter 
                 return true;
             }
 
-            sender.sendMessage(ChatColor.GOLD + "Verfuegbare Motive: " + String.join(", ", motifIds));
+            sender.sendMessage(ChatColor.GOLD + "Verf\u00fcgbare Motive: " + String.join(", ", motifIds));
             return true;
         }
 

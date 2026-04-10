@@ -1,4 +1,4 @@
-package de.mcbesser.tradingcards;
+﻿package de.mcbesser.tradingcards;
 
 import de.mcbesser.tradingcards.image.LoadedMotif;
 import java.io.ByteArrayInputStream;
