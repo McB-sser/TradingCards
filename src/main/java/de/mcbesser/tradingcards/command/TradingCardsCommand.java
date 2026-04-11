@@ -1,4 +1,4 @@
-﻿package de.mcbesser.tradingcards.command;
+package de.mcbesser.tradingcards.command;
 
 import de.mcbesser.tradingcards.TradingCardsPlugin;
 import de.mcbesser.tradingcards.image.LoadedMotif;

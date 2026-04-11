@@ -1,7 +1,7 @@
-﻿name: TradingCards
+name: TradingCards
 version: ${project.version}
 main: de.mcbesser.tradingcards.TradingCardsPlugin
-api-version: "1.20"
+api-version: "26.1.1"
 author: McB_sser
 description: Sammelkarten-Plugin, das Motivbilder in Minecraft-Karten umwandelt.
 commands:
