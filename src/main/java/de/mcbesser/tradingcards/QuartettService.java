@@ -34,6 +34,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.World;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -119,10 +120,25 @@ public final class QuartettService {
     }
 
     public Session ensureSession(Inventory inventory) {
-        if (inventory == null || !(inventory.getHolder() instanceof DoubleChest doubleChest)) {
+        if (inventory == null) {
+            return null;
+        }
+        if (inventory.getHolder() instanceof QuartettInventoryHolder holder) {
+            return sessions.get(holder.sessionId);
+        }
+        if (!(inventory.getHolder() instanceof DoubleChest doubleChest)) {
             return null;
         }
         return ensureSession(((Chest) doubleChest.getLeftSide()).getBlock());
+    }
+
+    public Session openSession(Player player, Block block) {
+        Session session = ensureSession(block);
+        if (session == null || player == null) {
+            return session;
+        }
+        player.openInventory(session.inventory());
+        return session;
     }
 
     public void ensureSessionsInChunk(Chunk chunk) {
@@ -1495,6 +1511,7 @@ public final class QuartettService {
         private final Block leftBlock;
         private final Block rightBlock;
         private final BlockFace facing;
+        private final Inventory inventory;
         private final Map<Side, UUID> players = new EnumMap<>(Side.class);
         private final Map<Side, ItemDisplay> headStands = new EnumMap<>(Side.class);
         private final Map<Side, TextDisplay> headMarkers = new EnumMap<>(Side.class);
@@ -1518,6 +1535,7 @@ public final class QuartettService {
             this.leftBlock = leftBlock;
             this.rightBlock = rightBlock;
             this.facing = facing;
+            this.inventory = createSessionInventory(id);
             ownCards.put(Side.LEFT, new ArrayList<>());
             ownCards.put(Side.RIGHT, new ArrayList<>());
             newCards.put(Side.LEFT, new ArrayList<>());
@@ -1592,10 +1610,7 @@ public final class QuartettService {
         }
 
         private Inventory inventory() {
-            if (!(leftBlock.getState() instanceof Chest chest)) {
-                return null;
-            }
-            return chest.getInventory();
+            return inventory;
         }
 
         private List<ItemStack> allStoredCards() {
@@ -1603,6 +1618,27 @@ public final class QuartettService {
             ownCards.values().forEach(list -> list.forEach(item -> cards.add(item.clone())));
             newCards.values().forEach(list -> list.forEach(item -> cards.add(item.clone())));
             return cards;
+        }
+    }
+
+    private Inventory createSessionInventory(String sessionId) {
+        QuartettInventoryHolder holder = new QuartettInventoryHolder(sessionId);
+        Inventory inventory = Bukkit.createInventory(holder, 54, "Quartett");
+        holder.inventory = inventory;
+        return inventory;
+    }
+
+    private static final class QuartettInventoryHolder implements InventoryHolder {
+        private final String sessionId;
+        private Inventory inventory;
+
+        private QuartettInventoryHolder(String sessionId) {
+            this.sessionId = sessionId;
+        }
+
+        @Override
+        public Inventory getInventory() {
+            return inventory;
         }
     }
 }

@@ -77,6 +77,11 @@ public final class TradingCardListener implements Listener {
         if (mode == null) {
             return;
         }
+        if (!plugin.getSkyCityAccessBridge().canUseDecorations(event.getPlayer(), event.getClickedBlock().getRelative(face).getLocation(), true)) {
+            event.getPlayer().sendMessage("Du darfst diese Sammelkarten hier nicht platzieren.");
+            event.setCancelled(true);
+            return;
+        }
         CardStats stats = plugin.getCardService().getStats(item);
 
         Block supportBottom = event.getClickedBlock();
@@ -169,6 +174,10 @@ public final class TradingCardListener implements Listener {
         if (!event.getPlayer().hasPermission("tradingcards.place")) {
             return;
         }
+        if (!plugin.getSkyCityAccessBridge().canUseDecorations(event.getPlayer(), frame.getLocation())) {
+            event.getPlayer().sendMessage("Du darfst diese Sammelkarten hier nicht bedienen.");
+            return;
+        }
         if (plugin.getQuartettService() != null
             && plugin.getQuartettService().isQuartettRoundFrame(frame)
             && !plugin.getQuartettService().canRevealQuartettFrame(event.getPlayer(), frame)) {
@@ -199,6 +208,10 @@ public final class TradingCardListener implements Listener {
         }
         Player player = event.getDamager() instanceof Player ? (Player) event.getDamager() : null;
         if (player == null || !player.hasPermission("tradingcards.break")) {
+            event.setCancelled(true);
+            return;
+        }
+        if (!plugin.getSkyCityAccessBridge().canUseDecorations(player, event.getEntity().getLocation())) {
             event.setCancelled(true);
             return;
         }

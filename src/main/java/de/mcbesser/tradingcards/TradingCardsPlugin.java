@@ -13,6 +13,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
     private MotifRegistry motifRegistry;
     private CardService cardService;
     private QuartettService quartettService;
+    private SkyCityAccessBridge skyCityAccessBridge;
 
     @Override
     public void onEnable() {
@@ -22,6 +23,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
         this.motifRegistry = new MotifRegistry(this, new File(getDataFolder(), getConfig().getString("motif-folder", "motifs")));
         this.cardService = new CardService(this);
         this.quartettService = new QuartettService(this);
+        this.skyCityAccessBridge = new SkyCityAccessBridge(this);
 
         reloadMotifs();
         quartettService.loadPersistedSessions();
@@ -62,6 +64,10 @@ public final class TradingCardsPlugin extends JavaPlugin {
 
     public QuartettService getQuartettService() {
         return quartettService;
+    }
+
+    public SkyCityAccessBridge getSkyCityAccessBridge() {
+        return skyCityAccessBridge;
     }
 
     private void createDataFolders() {

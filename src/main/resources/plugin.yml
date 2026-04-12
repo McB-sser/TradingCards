@@ -4,6 +4,7 @@ main: de.mcbesser.tradingcards.TradingCardsPlugin
 api-version: "26.1.1"
 author: McB_sser
 description: Sammelkarten-Plugin, das Motivbilder in Minecraft-Karten umwandelt.
+softdepend: [SkyCity]
 commands:
   tradingcards:
     description: Hauptbefehl f\u00fcr das TradingCards-Plugin

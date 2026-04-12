@@ -9,8 +9,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.Inventory;
@@ -29,6 +31,23 @@ public final class QuartettListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onQuartettInventoryOpen(InventoryOpenEvent event) {
         quartettService.ensureSession(event.getInventory());
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
+    public void onQuartettChestInteract(PlayerInteractEvent event) {
+        if (!(event.getPlayer() instanceof org.bukkit.entity.Player player)) {
+            return;
+        }
+        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND
+            || event.getAction() != Action.RIGHT_CLICK_BLOCK
+            || event.getClickedBlock() == null
+            || !quartettService.isQuartettChest(event.getClickedBlock())) {
+            return;
+        }
+        event.setCancelled(true);
+        event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+        event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+        quartettService.openSession(player, event.getClickedBlock());
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
