@@ -24,11 +24,14 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.block.DoubleChest;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Interaction;
 import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.World;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
@@ -39,8 +42,11 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.Transformation;
 import org.bukkit.util.io.BukkitObjectInputStream;
 import org.bukkit.util.io.BukkitObjectOutputStream;
+import org.joml.AxisAngle4f;
+import org.joml.Vector3f;
 
 public final class QuartettService {
 
@@ -394,7 +400,6 @@ public final class QuartettService {
             if (session.sideOf(player.getUniqueId()) == null) {
                 Side side = assignFreeSide(session, player);
                 if (side != null) {
-                    player.sendMessage("Du spielst jetzt auf der " + side.label + " Seite.");
                     return;
                 }
             }
@@ -995,36 +1000,34 @@ public final class QuartettService {
     }
 
     private void spawnDisplay(Session session) {
-        session.modeStand = spawnTextStand(session.id, session.modeLocation(), "mode", null);
+        session.modeStand = spawnTextDisplay(session.id, session.modeLocation(), "mode", null);
         session.modeInteraction = spawnInteraction(session.id, session.modeLocation().clone().add(0.0, -0.15, 0.0), "mode", null);
 
-        ArmorStand leftHead = spawnHeadStand(session.id, session.headLocation(Side.LEFT), Side.LEFT);
-        leftHead.setRotation(yawForFacing(session.facing), 0.0F);
-        session.headStands.put(Side.LEFT, leftHead);
-        ArmorStand rightHead = spawnHeadStand(session.id, session.headLocation(Side.RIGHT), Side.RIGHT);
-        rightHead.setRotation(yawForFacing(session.facing), 0.0F);
-        session.headStands.put(Side.RIGHT, rightHead);
+        session.headStands.put(Side.LEFT, spawnHeadDisplay(session.id, session.headLocation(Side.LEFT), session.facing, Side.LEFT));
+        session.headStands.put(Side.RIGHT, spawnHeadDisplay(session.id, session.headLocation(Side.RIGHT), session.facing, Side.RIGHT));
+        session.headMarkers.put(Side.LEFT, spawnTextDisplay(session.id, session.headMarkerLocation(Side.LEFT), "marker", Side.LEFT));
+        session.headMarkers.put(Side.RIGHT, spawnTextDisplay(session.id, session.headMarkerLocation(Side.RIGHT), "marker", Side.RIGHT));
 
         session.headInteractions.put(Side.LEFT, spawnInteraction(session.id, session.headClickLocation(Side.LEFT), "head", Side.LEFT));
         session.headInteractions.put(Side.RIGHT, spawnInteraction(session.id, session.headClickLocation(Side.RIGHT), "head", Side.RIGHT));
     }
 
     private void renderDisplay(Session session) {
-        session.modeStand.setCustomName(session.roundResolved ? "Klick mich" : modeLabel(session));
-        session.modeStand.setCustomNameVisible(true);
+        configureTextDisplay(session.modeStand, session.modeLocation(), "§e" + (session.roundResolved ? "Klick mich" : modeLabel(session)), 0.95F);
         for (Side side : Side.values()) {
-            ArmorStand stand = session.headStands.get(side);
+            ItemDisplay stand = session.headStands.get(side);
+            TextDisplay markerDisplay = session.headMarkers.get(side);
             if (stand == null) {
                 continue;
             }
-            stand.getEquipment().setHelmet(null);
+            configureHeadDisplay(stand, session.headLocation(side), session.facing, null);
             Side markerSide = session.roundResolved ? session.winner : session.currentTurn;
             String marker = session.roundResolved ? "\u00A76\u2191" : "\u2191";
-            stand.setCustomName(markerSide == side ? marker : null);
-            stand.setCustomNameVisible(markerSide == side);
+            configureTextDisplay(markerDisplay, session.headMarkerLocation(side), markerSide == side ? marker : "", 0.7F);
             UUID playerId = session.players.get(side);
             if (playerId == null) {
-                stand.getEquipment().setHelmet(new ItemStack(side == Side.LEFT ? Material.SKELETON_SKULL : Material.WITHER_SKELETON_SKULL));
+                configureHeadDisplay(stand, session.headLocation(side), session.facing,
+                    new ItemStack(side == Side.LEFT ? Material.SKELETON_SKULL : Material.WITHER_SKELETON_SKULL));
                 continue;
             }
 
@@ -1039,43 +1042,75 @@ public final class QuartettService {
                 }
                 head.setItemMeta(meta);
             }
-            stand.getEquipment().setHelmet(head);
+            configureHeadDisplay(stand, session.headLocation(side), session.facing, head);
         }
     }
 
-    private ArmorStand spawnTextStand(String sessionId, Location location, String type, Side side) {
-        return location.getWorld().spawn(location, ArmorStand.class, stand -> {
-            stand.setInvisible(true);
-            stand.setInvulnerable(true);
-            stand.setMarker(true);
-            stand.setSmall(true);
-            stand.setGravity(false);
-            stand.setBasePlate(false);
-            stand.setCustomNameVisible(true);
-            stamp(stand, sessionId, type, side);
+    private TextDisplay spawnTextDisplay(String sessionId, Location location, String type, Side side) {
+        return location.getWorld().spawn(location, TextDisplay.class, display -> {
+            configureTextDisplay(display, location, "", 1.0F);
+            stamp(display, sessionId, type, side);
         });
     }
 
-    private ArmorStand spawnHeadStand(String sessionId, Location location, Side side) {
-        return location.getWorld().spawn(location, ArmorStand.class, stand -> {
-            stand.setInvisible(true);
-            stand.setInvulnerable(true);
-            stand.setMarker(true);
-            stand.setSmall(false);
-            stand.setGravity(false);
-            stand.setBasePlate(false);
-            stand.setCustomNameVisible(false);
-            stamp(stand, sessionId, "head", side);
+    private ItemDisplay spawnHeadDisplay(String sessionId, Location location, BlockFace facing, Side side) {
+        return location.getWorld().spawn(location, ItemDisplay.class, display -> {
+            configureHeadDisplay(display, location, facing, new ItemStack(Material.SKELETON_SKULL));
+            stamp(display, sessionId, "head", side);
         });
     }
 
     private Interaction spawnInteraction(String sessionId, Location location, String type, Side side) {
         return location.getWorld().spawn(location, Interaction.class, interaction -> {
             interaction.setResponsive(true);
-            interaction.setInteractionWidth(0.35F);
-            interaction.setInteractionHeight(0.35F);
+            interaction.setInteractionWidth(0.4125F);
+            interaction.setInteractionHeight(0.4125F);
+            interaction.setPersistent(false);
             stamp(interaction, sessionId, type, side);
         });
+    }
+
+    private void configureTextDisplay(TextDisplay display, Location location, String text, float scale) {
+        if (display == null || location == null) {
+            return;
+        }
+        display.setBillboard(Display.Billboard.CENTER);
+        display.setSeeThrough(true);
+        display.setShadowed(false);
+        display.setPersistent(false);
+        display.setInterpolationDelay(0);
+        display.setInterpolationDuration(0);
+        display.setTeleportDuration(0);
+        display.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(), new Vector3f(scale, scale, scale), new AxisAngle4f()));
+        String desiredText = text == null ? "" : text;
+        if (!desiredText.equals(display.getText())) {
+            display.setText(desiredText);
+        }
+        if (display.getLocation().distanceSquared(location) > 1.0E-4D) {
+            display.teleport(location);
+        }
+    }
+
+    private void configureHeadDisplay(ItemDisplay display, Location location, BlockFace facing, ItemStack itemStack) {
+        if (display == null || location == null) {
+            return;
+        }
+        display.setBillboard(Display.Billboard.FIXED);
+        display.setPersistent(false);
+        display.setInterpolationDelay(0);
+        display.setInterpolationDuration(0);
+        display.setTeleportDuration(0);
+        display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+        display.setItemStack(itemStack);
+        display.setTransformation(new Transformation(
+            new Vector3f(),
+            new AxisAngle4f((float) Math.toRadians(yawForFacing(facing) + 180.0F), 0.0F, 1.0F, 0.0F),
+            new Vector3f(0.9F, 0.9F, 0.9F),
+            new AxisAngle4f()
+        ));
+        if (display.getLocation().distanceSquared(location) > 1.0E-4D) {
+            display.teleport(location);
+        }
     }
 
     private void stamp(Entity entity, String sessionId, String type, Side side) {
@@ -1461,7 +1496,8 @@ public final class QuartettService {
         private final Block rightBlock;
         private final BlockFace facing;
         private final Map<Side, UUID> players = new EnumMap<>(Side.class);
-        private final Map<Side, ArmorStand> headStands = new EnumMap<>(Side.class);
+        private final Map<Side, ItemDisplay> headStands = new EnumMap<>(Side.class);
+        private final Map<Side, TextDisplay> headMarkers = new EnumMap<>(Side.class);
         private final Map<Side, Interaction> headInteractions = new EnumMap<>(Side.class);
         private final Map<Side, ItemFrame> roundFrames = new EnumMap<>(Side.class);
         private final Map<Side, ItemStack> roundCards = new EnumMap<>(Side.class);
@@ -1469,7 +1505,7 @@ public final class QuartettService {
         private final Map<Side, List<ItemStack>> ownCards = new EnumMap<>(Side.class);
         private final Map<Side, List<ItemStack>> newCards = new EnumMap<>(Side.class);
         private final Map<Side, Integer> pages = new EnumMap<>(Side.class);
-        private ArmorStand modeStand;
+        private TextDisplay modeStand;
         private Interaction modeInteraction;
         private Side currentTurn;
         private CompareMode mode;
@@ -1503,9 +1539,11 @@ public final class QuartettService {
             if (modeInteraction != null) {
                 modeInteraction.remove();
             }
-            headStands.values().forEach(ArmorStand::remove);
+            headStands.values().forEach(Entity::remove);
+            headMarkers.values().forEach(Entity::remove);
             headInteractions.values().forEach(Interaction::remove);
             headStands.clear();
+            headMarkers.clear();
             headInteractions.clear();
             modeStand = null;
             modeInteraction = null;
@@ -1532,16 +1570,20 @@ public final class QuartettService {
         private Location modeLocation() {
             double x = (leftBlock.getX() + rightBlock.getX()) / 2.0D + 0.5D;
             double z = (leftBlock.getZ() + rightBlock.getZ()) / 2.0D + 0.5D;
-            return new Location(leftBlock.getWorld(), x, leftBlock.getY() + 1.15D, z);
+            return new Location(leftBlock.getWorld(), x, leftBlock.getY() + 1.65D, z);
         }
 
         private Location headLocation(Side side) {
             Block block = side == Side.LEFT ? leftBlock : rightBlock;
-            return block.getLocation().add(0.5, 0.72, 0.5);
+            return block.getLocation().add(0.5, 1.095, 0.5);
         }
 
         private Location headClickLocation(Side side) {
             return headLocation(side).clone().add(0.0, 0.05, 0.0);
+        }
+
+        private Location headMarkerLocation(Side side) {
+            return headLocation(side).clone().add(0.0, 0.42, 0.0);
         }
 
         private Block cardBlock(Side side) {

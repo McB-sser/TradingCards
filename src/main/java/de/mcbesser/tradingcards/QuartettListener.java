@@ -11,7 +11,6 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.Inventory;
@@ -96,13 +95,5 @@ public final class QuartettListener implements Listener {
         }
         event.setCancelled(true);
         quartettService.handleHeadInteract(event.getPlayer(), clicked);
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
-    public void onQuartettArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
-        if (!quartettService.isQuartettEntity(event.getRightClicked())) {
-            return;
-        }
-        event.setCancelled(true);
     }
 }
