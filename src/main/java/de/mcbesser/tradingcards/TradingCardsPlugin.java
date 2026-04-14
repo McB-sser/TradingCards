@@ -2,6 +2,7 @@ package de.mcbesser.tradingcards;
 
 import de.mcbesser.tradingcards.command.TradingCardsCommand;
 import de.mcbesser.tradingcards.image.MotifRegistry;
+import de.mcbesser.tradingcards.profile.PlayerHeadCache;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -14,6 +15,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
     private CardService cardService;
     private QuartettService quartettService;
     private SkyCityAccessBridge skyCityAccessBridge;
+    private PlayerHeadCache playerHeadCache;
 
     @Override
     public void onEnable() {
@@ -24,6 +26,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
         this.cardService = new CardService(this);
         this.quartettService = new QuartettService(this);
         this.skyCityAccessBridge = new SkyCityAccessBridge(this);
+        this.playerHeadCache = new PlayerHeadCache(this, "player-head-cache.yml");
 
         reloadMotifs();
         quartettService.loadPersistedSessions();
@@ -68,6 +71,10 @@ public final class TradingCardsPlugin extends JavaPlugin {
 
     public SkyCityAccessBridge getSkyCityAccessBridge() {
         return skyCityAccessBridge;
+    }
+
+    public PlayerHeadCache getPlayerHeadCache() {
+        return playerHeadCache;
     }
 
     private void createDataFolders() {

@@ -1051,7 +1051,7 @@ public final class QuartettService {
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta meta = (SkullMeta) head.getItemMeta();
             if (meta != null) {
-                meta.setOwningPlayer(player);
+                plugin.getPlayerHeadCache().applyCachedProfile(meta, player);
                 if (session.winner == side) {
                     meta.addEnchant(Enchantment.LURE, 1, true);
                     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
@@ -1186,7 +1186,7 @@ public final class QuartettService {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         if (meta != null) {
-            meta.setOwningPlayer(player);
+            plugin.getPlayerHeadCache().applyCachedProfile(meta, player);
             meta.setDisplayName("\u00A7e" + playerText(session, side));
             head.setItemMeta(meta);
         }
