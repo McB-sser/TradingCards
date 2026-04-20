@@ -38,6 +38,7 @@ public final class TradingCardsPlugin extends JavaPlugin {
             quartettService.ensureSessionsInLoadedChunks();
         });
         getServer().getScheduler().runTaskLater(this, quartettService::ensureSessionsInLoadedChunks, 20L);
+        getServer().getScheduler().runTaskTimer(this, quartettService::syncDisplayVisibility, 20L, 20L);
     }
 
     @Override

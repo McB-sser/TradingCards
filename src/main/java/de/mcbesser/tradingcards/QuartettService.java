@@ -161,6 +161,19 @@ public final class QuartettService {
         }
     }
 
+    public void syncDisplayVisibility() {
+        for (Session session : sessions.values()) {
+            if (hasNearbyViewer(session.modeLocation())) {
+                if (!session.isValid()) {
+                    spawnDisplay(session);
+                }
+                renderDisplay(session);
+                continue;
+            }
+            session.clearDisplayEntities();
+        }
+    }
+
     public void loadPersistedSessions() {
         storedSnapshots.clear();
         if (!sessionsFile.isFile()) {
@@ -1129,6 +1142,23 @@ public final class QuartettService {
         }
     }
 
+    private boolean hasNearbyViewer(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return false;
+        }
+        double maxDistance = plugin.getConfig().getDouble("display.max-view-distance", 64.0D);
+        double maxDistanceSquared = maxDistance * maxDistance;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player == null || !player.isOnline() || player.isDead() || player.getWorld() != location.getWorld()) {
+                continue;
+            }
+            if (player.getLocation().distanceSquared(location) <= maxDistanceSquared) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void stamp(Entity entity, String sessionId, String type, Side side) {
         PersistentDataContainer data = entity.getPersistentDataContainer();
         data.set(quartettSessionKey, PersistentDataType.STRING, sessionId);
@@ -1548,9 +1578,7 @@ public final class QuartettService {
             return modeStand != null && modeStand.isValid();
         }
 
-        private void clearWorldState() {
-            clearRoundEntity(Side.LEFT);
-            clearRoundEntity(Side.RIGHT);
+        private void clearDisplayEntities() {
             if (modeStand != null) {
                 modeStand.remove();
             }
@@ -1565,6 +1593,12 @@ public final class QuartettService {
             headInteractions.clear();
             modeStand = null;
             modeInteraction = null;
+        }
+
+        private void clearWorldState() {
+            clearRoundEntity(Side.LEFT);
+            clearRoundEntity(Side.RIGHT);
+            clearDisplayEntities();
         }
 
         private void clearRoundEntity(Side side) {
