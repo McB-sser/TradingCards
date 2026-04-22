@@ -37,8 +37,9 @@ public final class TradingCardsPlugin extends JavaPlugin {
             cardService.rebindLoadedMaps();
             quartettService.ensureSessionsInLoadedChunks();
         });
-        getServer().getScheduler().runTaskLater(this, quartettService::ensureSessionsInLoadedChunks, 20L);
-        getServer().getScheduler().runTaskTimer(this, quartettService::syncDisplayVisibility, 20L, 20L);
+        getServer().getScheduler().runTaskLater(this, quartettService::ensureSessionsInLoadedChunks, 37L);
+        long displaySyncInterval = Math.max(20L, getConfig().getLong("display.sync-interval-ticks", 40L));
+        getServer().getScheduler().runTaskTimer(this, quartettService::syncDisplayVisibility, 31L, displaySyncInterval);
     }
 
     @Override

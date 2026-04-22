@@ -82,6 +82,7 @@ public final class QuartettService {
     private final File sessionsFile;
     private final Map<String, Session> sessions = new HashMap<>();
     private final Map<String, SessionSnapshot> storedSnapshots = new HashMap<>();
+    private final Map<String, ViewerCacheEntry> viewerCache = new HashMap<>();
 
     public QuartettService(TradingCardsPlugin plugin) {
         this.plugin = plugin;
@@ -143,6 +144,9 @@ public final class QuartettService {
 
     public void ensureSessionsInChunk(Chunk chunk) {
         if (chunk == null) {
+            return;
+        }
+        if (!hasNearbyViewer(chunk)) {
             return;
         }
         clearQuartettEntitiesInChunk(chunk);
@@ -1029,6 +1033,9 @@ public final class QuartettService {
     }
 
     private void spawnDisplay(Session session) {
+        if (!hasNearbyViewer(session.modeLocation())) {
+            return;
+        }
         session.modeStand = spawnTextDisplay(session.id, session.modeLocation(), "mode", null);
         session.modeInteraction = spawnInteraction(session.id, session.modeLocation().clone().add(0.0, -0.15, 0.0), "mode", null);
 
@@ -1146,6 +1153,15 @@ public final class QuartettService {
         if (location == null || location.getWorld() == null) {
             return false;
         }
+        long now = System.currentTimeMillis();
+        long checkIntervalMillis = ticksToMillis(plugin.getConfig().getLong("display.proximity-check-interval-ticks", 40L));
+        long unloadDelayMillis = ticksToMillis(plugin.getConfig().getLong("display.unload-delay-ticks", 200L));
+        ViewerCacheEntry entry = viewerCache.computeIfAbsent(locationKey(location), ignored -> new ViewerCacheEntry());
+        if (now - entry.lastCheckMillis < checkIntervalMillis) {
+            return entry.nearby || now - entry.lastNearbyMillis <= unloadDelayMillis;
+        }
+
+        entry.lastCheckMillis = now;
         double maxDistance = plugin.getConfig().getDouble("display.max-view-distance", 64.0D);
         double maxDistanceSquared = maxDistance * maxDistance;
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -1153,10 +1169,46 @@ public final class QuartettService {
                 continue;
             }
             if (player.getLocation().distanceSquared(location) <= maxDistanceSquared) {
+                entry.nearby = true;
+                entry.lastNearbyMillis = now;
+                return true;
+            }
+        }
+        entry.nearby = false;
+        return now - entry.lastNearbyMillis <= unloadDelayMillis;
+    }
+
+    private long ticksToMillis(long ticks) {
+        return Math.max(1L, ticks) * 50L;
+    }
+
+    private String locationKey(Location location) {
+        return location.getWorld().getUID() + ":" + location.getBlockX() + ":" + location.getBlockY() + ":" + location.getBlockZ();
+    }
+
+    private boolean hasNearbyViewer(Chunk chunk) {
+        World world = chunk.getWorld();
+        double maxDistance = plugin.getConfig().getDouble("display.max-view-distance", 64.0D) + 16.0D;
+        double maxDistanceSquared = maxDistance * maxDistance;
+        double centerX = (chunk.getX() << 4) + 8.0D;
+        double centerZ = (chunk.getZ() << 4) + 8.0D;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player == null || !player.isOnline() || player.isDead() || player.getWorld() != world) {
+                continue;
+            }
+            double dx = player.getLocation().getX() - centerX;
+            double dz = player.getLocation().getZ() - centerZ;
+            if (dx * dx + dz * dz <= maxDistanceSquared) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static final class ViewerCacheEntry {
+        private long lastCheckMillis;
+        private long lastNearbyMillis;
+        private boolean nearby;
     }
 
     private void stamp(Entity entity, String sessionId, String type, Side side) {

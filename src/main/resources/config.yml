@@ -1,1 +1,6 @@
 motif-folder: motifs
+display:
+  max-view-distance: 64.0
+  sync-interval-ticks: 40
+  proximity-check-interval-ticks: 40
+  unload-delay-ticks: 200
