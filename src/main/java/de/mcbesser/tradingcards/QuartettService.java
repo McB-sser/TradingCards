@@ -1111,7 +1111,7 @@ public final class QuartettService {
             return;
         }
         display.setBillboard(Display.Billboard.CENTER);
-        display.setSeeThrough(true);
+        display.setSeeThrough(false);
         display.setShadowed(false);
         display.setPersistent(false);
         display.setInterpolationDelay(0);
@@ -1140,7 +1140,7 @@ public final class QuartettService {
         display.setItemStack(itemStack);
         display.setTransformation(new Transformation(
             new Vector3f(),
-            new AxisAngle4f((float) Math.toRadians(yawForFacing(facing) + 180.0F), 0.0F, 1.0F, 0.0F),
+            new AxisAngle4f((float) Math.toRadians(yawForFacing(facing)), 0.0F, 1.0F, 0.0F),
             new Vector3f(0.9F, 0.9F, 0.9F),
             new AxisAngle4f()
         ));
