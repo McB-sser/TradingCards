@@ -68,8 +68,8 @@ public final class CardService {
         meta.setDisplayName(motif.displayName());
         List<String> lore = new ArrayList<>(buildLore(motif, stats));
         lore.add(ChatColor.YELLOW + "Rechtsklick f\u00fcr 1x3 Anzeige.");
-        lore.add(ChatColor.YELLOW + "Schleichend rechts f\u00fcr 1x2 Bild.");
-        lore.add(ChatColor.YELLOW + "Schleichend links f\u00fcr Wertekarte.");
+        lore.add(ChatColor.YELLOW + "Ducken + Rechtsklick f\u00fcr 1x2 Bild.");
+        lore.add(ChatColor.YELLOW + "Ducken + Linksklick f\u00fcr Wertekarte.");
         meta.setLore(lore);
 
         PersistentDataContainer data = meta.getPersistentDataContainer();

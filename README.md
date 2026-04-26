@@ -14,8 +14,8 @@ Minecraft-Plugin auf Maven-Basis, das TradingCards aus Bildern und JSON-Metadate
 ## Platzierung
 
 - `Rechtsklick`: platziert eine `1x3`-Anzeige mit Motiv oben und verdeckter Wertekarte unten.
-- `Schleichend + Rechtsklick`: platziert ein `1x2`-Motivbild ohne Wertekarte.
-- `Schleichend + Linksklick`: platziert nur die Wertekarte als `1x1`.
+- `Ducken + Rechtsklick`: platziert ein `1x2`-Motivbild ohne Wertekarte.
+- `Ducken + Linksklick`: platziert nur die Wertekarte als `1x1`.
 - Die Wandanzeigen werden mit unsichtbaren Item Frames erzeugt und verhalten sich wie ein gemeinsames Bild.
 - Beim Abbauen wird das komplette Display entfernt und wieder zu genau einer Handkarte.
 
